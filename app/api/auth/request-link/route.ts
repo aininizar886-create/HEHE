@@ -27,7 +27,11 @@ export async function POST(request: Request) {
     const { token } = await createMagicLinkToken(user.id);
     await sendMagicLinkEmail(email, token);
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Gagal mengirim email. Coba lagi ya." }, { status: 500 });
+  } catch (error) {
+    const message =
+      error instanceof Error && process.env.NODE_ENV !== "production"
+        ? error.message
+        : "Gagal mengirim email. Coba lagi ya.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

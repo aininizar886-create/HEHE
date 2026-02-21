@@ -6,7 +6,12 @@ const smtpHost = process.env.SMTP_HOST ?? "";
 const smtpPort = Number(process.env.SMTP_PORT ?? "465");
 const smtpUser = process.env.SMTP_USER ?? "";
 const smtpPass = process.env.SMTP_PASS ?? "";
-const emailFrom = process.env.EMAIL_FROM ?? "no-reply@localhost";
+const emailFrom = process.env.EMAIL_FROM ?? "";
+const resolveFromAddress = () => {
+  const candidate = emailFrom.trim();
+  if (candidate && candidate.includes("@")) return candidate;
+  return smtpUser;
+};
 
 const getBaseUrl = () => {
   if (process.env.APP_URL) return process.env.APP_URL;
@@ -42,11 +47,15 @@ export const sendMagicLinkEmail = async (email: string, token: string) => {
     </div>
   `;
 
+  const fromAddress = resolveFromAddress();
+  const replyTo = emailFrom && emailFrom !== fromAddress ? emailFrom : undefined;
+
   await transporter.sendMail({
-    from: emailFrom,
+    from: fromAddress,
     to: email,
     subject,
     text,
     html,
+    replyTo,
   });
 };
