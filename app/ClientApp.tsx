@@ -2653,11 +2653,14 @@ export default function MelpinApp() {
   };
 
   const createContactThread = async (email: string) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
     try {
       setContactStatus("Menambahkan...");
       const response = await apiJson<{ thread: Record<string, unknown> }>("/api/chats", {
         method: "POST",
         body: JSON.stringify({ contactEmail: email }),
+        signal: controller.signal,
       });
       const existing = chatThreadsRef.current.find(
         (thread) => thread.kind === "realtime" && thread.contactId && thread.contactId === response.thread.contactId
@@ -2677,7 +2680,13 @@ export default function MelpinApp() {
       setIsAddingContact(false);
       void refreshThreadMeta();
     } catch (error) {
-      setContactStatus(error instanceof Error ? error.message : "Gagal menambah kontak.");
+      if (controller.signal.aborted) {
+        setContactStatus("Server lagi sibuk. Coba lagi sebentar ya.");
+      } else {
+        setContactStatus(error instanceof Error ? error.message : "Gagal menambah kontak.");
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
 
