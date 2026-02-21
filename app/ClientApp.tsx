@@ -757,6 +757,39 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+const resizeImageFile = async (file: File, maxSize = 320, quality = 0.86) => {
+  if (!file.type.startsWith("image/")) return readFileAsDataUrl(file);
+  const toDataUrl = (image: CanvasImageSource, width: number, height: number) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas tidak tersedia.");
+    ctx.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", quality);
+  };
+  if ("createImageBitmap" in window) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const result = toDataUrl(bitmap, width, height);
+    bitmap.close();
+    return result;
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = document.createElement("img");
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Gagal baca gambar."));
+    image.src = dataUrl;
+  });
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  return toDataUrl(image, width, height);
+};
+
 const formatChatTime = (timestamp: number) =>
   new Date(timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
@@ -1244,6 +1277,7 @@ export default function MelpinApp() {
   const [chatSearch, setChatSearch] = useState("");
   const [aiLoadingThread, setAiLoadingThread] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
+  const [isDataSyncing, setIsDataSyncing] = useState(false);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -1346,6 +1380,18 @@ export default function MelpinApp() {
     setActiveThreadId(threadsWithMessages[0]?.id ?? null);
   }, [ensureDefaultThreads, sessionUserId]);
 
+  const syncServerData = useCallback(
+    async (userIdOverride?: string | null) => {
+      setIsDataSyncing(true);
+      try {
+        await loadServerData(userIdOverride);
+      } finally {
+        setIsDataSyncing(false);
+      }
+    },
+    [loadServerData]
+  );
+
   const finalizeLogin = useCallback(async () => {
     const session = await apiJson<{ user: { id: string; profile?: Profile | null } | null }>("/api/session");
     if (!session.user) {
@@ -1364,8 +1410,8 @@ export default function MelpinApp() {
     } else {
       setCurrentView("dashboard");
     }
-    await loadServerData(session.user.id);
-  }, [loadServerData]);
+    void syncServerData(session.user.id).catch(() => {});
+  }, [syncServerData]);
 
   const loadPrayerCities = useCallback(async () => {
     try {
@@ -1516,7 +1562,7 @@ export default function MelpinApp() {
         } else {
           setCurrentView("dashboard");
         }
-        await loadServerData(session.user.id);
+        await syncServerData(session.user.id);
       } catch {
         if (!cancelled) {
           setIsLoggedIn(false);
@@ -1532,7 +1578,7 @@ export default function MelpinApp() {
     return () => {
       cancelled = true;
     };
-  }, [loadServerData]);
+  }, [syncServerData]);
 
   useEffect(() => {
     writeStorage(STORAGE_KEYS.login, isLoggedIn);
@@ -2370,7 +2416,7 @@ export default function MelpinApp() {
     if (!file) return;
     setIsAvatarUploading(true);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await resizeImageFile(file);
       setSetupAvatarImage(dataUrl);
       setSetupAvatarAsset("");
     } catch {
@@ -2449,7 +2495,7 @@ export default function MelpinApp() {
       setContactResults([]);
       setContactStatus("Kontak berhasil ditambahkan.");
       setIsAddingContact(false);
-      await loadServerData(sessionUserIdRef.current);
+      await syncServerData(sessionUserIdRef.current);
     } catch (error) {
       setContactStatus(error instanceof Error ? error.message : "Gagal menambah kontak.");
     }
@@ -3626,6 +3672,12 @@ export default function MelpinApp() {
                     <Sparkles size={14} />
                     {now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                   </div>
+                  {isDataSyncing && (
+                    <div className="flex items-center gap-2 rounded-full border border-hot/30 bg-ink-3/70 px-4 py-2 text-xs text-slate">
+                      <span className="h-3 w-3 animate-spin rounded-full border border-hot/40 border-t-hot" />
+                      Sinkron data...
+                    </div>
+                  )}
                 </div>
               </div>
 
