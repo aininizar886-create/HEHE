@@ -2655,15 +2655,27 @@ export default function MelpinApp() {
   const createContactThread = async (email: string) => {
     try {
       setContactStatus("Menambahkan...");
-      await apiJson("/api/chats", {
+      const response = await apiJson<{ thread: Record<string, unknown> }>("/api/chats", {
         method: "POST",
         body: JSON.stringify({ contactEmail: email }),
       });
+      const existing = chatThreadsRef.current.find(
+        (thread) => thread.kind === "realtime" && thread.contactId && thread.contactId === response.thread.contactId
+      );
+      const mapped = mapChatThreadFromServer(response.thread, existing?.messages ?? []);
+      setChatThreads((prev) => {
+        const hasThread = prev.some((item) => item.id === mapped.id);
+        if (hasThread) {
+          return prev.map((item) => (item.id === mapped.id ? mapped : item));
+        }
+        return [mapped, ...prev];
+      });
+      setActiveThreadId(mapped.id);
       setContactEmail("");
       setContactResults([]);
       setContactStatus("Kontak berhasil ditambahkan.");
       setIsAddingContact(false);
-      await syncServerData(sessionUserIdRef.current);
+      void refreshThreadMeta();
     } catch (error) {
       setContactStatus(error instanceof Error ? error.message : "Gagal menambah kontak.");
     }
