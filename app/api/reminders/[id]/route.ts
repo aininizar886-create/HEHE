@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { invalidateCache } from "@/lib/serverCache";
 
 const parseDateTime = (value: unknown) => {
   if (!value) return null;
@@ -46,6 +47,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     },
   });
 
+  invalidateCache(`reminders:${user.id}`);
   return NextResponse.json({ reminder });
 }
 
@@ -64,5 +66,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await prisma.reminder.delete({ where: { id: existing.id } });
+  invalidateCache(`reminders:${user.id}`);
   return NextResponse.json({ ok: true });
 }

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
 
 const parseStringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+
+const CACHE_TTL_MS = 5000;
 
 export async function GET() {
   const user = await getSessionUser();
@@ -12,12 +15,25 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const cacheKey = `notes:${user.id}`;
+  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  if (cached) {
+    return NextResponse.json(
+      { notes: cached },
+      { headers: { "Cache-Control": "private, max-age=5" } }
+    );
+  }
+
   const notes = await prisma.note.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
   });
 
-  return NextResponse.json({ notes });
+  setCached(cacheKey, notes);
+  return NextResponse.json(
+    { notes },
+    { headers: { "Cache-Control": "private, max-age=5" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -58,5 +74,6 @@ export async function POST(request: Request) {
     },
   });
 
+  invalidateCache(`notes:${user.id}`);
   return NextResponse.json({ note }, { status: 201 });
 }

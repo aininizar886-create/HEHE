@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
 
 const parseDateTime = (value: unknown) => {
   if (!value) return null;
@@ -12,10 +13,21 @@ const parseDateTime = (value: unknown) => {
   return null;
 };
 
+const CACHE_TTL_MS = 5000;
+
 export async function GET() {
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const cacheKey = `reminders:${user.id}`;
+  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  if (cached) {
+    return NextResponse.json(
+      { reminders: cached },
+      { headers: { "Cache-Control": "private, max-age=5" } }
+    );
   }
 
   const reminders = await prisma.reminder.findMany({
@@ -23,7 +35,11 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  return NextResponse.json({ reminders });
+  setCached(cacheKey, reminders);
+  return NextResponse.json(
+    { reminders },
+    { headers: { "Cache-Control": "private, max-age=5" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -57,5 +73,6 @@ export async function POST(request: Request) {
     },
   });
 
+  invalidateCache(`reminders:${user.id}`);
   return NextResponse.json({ reminder }, { status: 201 });
 }

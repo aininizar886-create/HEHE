@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
 
 const getDisplayName = (user: { name?: string | null; email: string; profile?: { name?: string | null } | null }) =>
   user.profile?.name?.trim() || user.name?.trim() || user.email.split("@")[0];
@@ -11,6 +12,8 @@ const getDisplayAvatar = (profile?: {
   avatarImage?: string | null;
   avatarAsset?: string | null;
 } | null) => profile?.avatarImage || profile?.avatarAsset || profile?.avatar || "💬";
+
+const CACHE_TTL_MS = 2000;
 
 const buildThreadDisplay = (
   thread: {
@@ -68,6 +71,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const cacheKey = `chats:${user.id}`;
+  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  if (cached) {
+    return NextResponse.json(
+      { threads: cached },
+      { headers: { "Cache-Control": "private, max-age=2" } }
+    );
+  }
+
   const threads = await prisma.chatThread.findMany({
     where: {
       OR: [{ userId: user.id }, { participants: { some: { userId: user.id } } }],
@@ -115,7 +127,11 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ threads: safeThreads });
+  setCached(cacheKey, safeThreads);
+  return NextResponse.json(
+    { threads: safeThreads },
+    { headers: { "Cache-Control": "private, max-age=2" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -175,6 +191,7 @@ export async function POST(request: Request) {
         },
         user.id
       );
+      invalidateCache(`chats:${user.id}`);
       return NextResponse.json({ thread: { ...existing, ...display } }, { status: 200 });
     }
   }
@@ -229,5 +246,6 @@ export async function POST(request: Request) {
     user.id
   );
 
+  invalidateCache(`chats:${user.id}`);
   return NextResponse.json({ thread: { ...thread, ...display } }, { status: 201 });
 }
