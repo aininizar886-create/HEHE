@@ -21,6 +21,70 @@ const getBaseUrl = () => {
   return "http://localhost:3000";
 };
 
+type NotificationEmail = {
+  to: string;
+  subject: string;
+  title: string;
+  message: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  footerNote?: string;
+};
+
+const renderNotificationEmail = ({
+  title,
+  message,
+  ctaText,
+  ctaUrl,
+  footerNote,
+}: NotificationEmail) => {
+  const safeMessage = message.replace(/\n/g, "<br />");
+  const ctaBlock =
+    ctaText && ctaUrl
+      ? `<a href="${ctaUrl}" style="display:inline-block;padding:12px 18px;background:#55b4ff;color:#0b1220;text-decoration:none;border-radius:999px;font-weight:700">${ctaText}</a>`
+      : "";
+  const footer = footerNote
+    ? `<p style="margin:18px 0 0;font-size:12px;color:#7b879a">${footerNote}</p>`
+    : "";
+  return `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <title>${title}</title>
+    </head>
+    <body style="margin:0;padding:24px;background:#0b1220;color:#e6edf3;font-family:Arial,sans-serif;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;border-radius:20px;background:#101a2d;padding:24px;">
+        <tr>
+          <td>
+            <p style="margin:0 0 10px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#93a4c1;">Melpin</p>
+            <h2 style="margin:0 0 12px;font-size:22px;color:#f6f8fb;">${title}</h2>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#c8d3e2;">${safeMessage}</p>
+            ${ctaBlock ? `<div style="margin:18px 0 8px;">${ctaBlock}</div>` : ""}
+            ${footer}
+          </td>
+        </tr>
+      </table>
+    </body>
+  </html>`;
+};
+
+const ensureTransporter = () => {
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    throw new Error("SMTP belum di-set.");
+  }
+
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+};
+
 export const sendMagicLinkEmail = async (email: string, token: string) => {
   const fromAddress = resolveFromAddress();
   if (!fromAddress || !fromAddress.includes("@")) {
@@ -65,23 +129,71 @@ export const sendMagicLinkEmail = async (email: string, token: string) => {
     return;
   }
 
-  if (!smtpHost || !smtpUser || !smtpPass) {
-    throw new Error("SMTP belum di-set.");
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-  });
+  const transporter = ensureTransporter();
 
   await transporter.sendMail({
     from: fromAddress,
     to: email,
+    subject,
+    text,
+    html,
+    replyTo,
+  });
+};
+
+export const sendNotificationEmail = async ({
+  to,
+  subject,
+  title,
+  message,
+  ctaText,
+  ctaUrl,
+  footerNote,
+}: NotificationEmail) => {
+  const fromAddress = resolveFromAddress();
+  if (!fromAddress || !fromAddress.includes("@")) {
+    throw new Error("Alamat pengirim email belum di-set.");
+  }
+
+  const html = renderNotificationEmail({
+    to,
+    subject,
+    title,
+    message,
+    ctaText,
+    ctaUrl,
+    footerNote,
+  });
+  const text = `${title}\n\n${message}${ctaText && ctaUrl ? `\n\n${ctaText}: ${ctaUrl}` : ""}`;
+  const replyTo = emailFrom && emailFrom !== fromAddress ? emailFrom : undefined;
+
+  if (mailWorkerUrl && mailWorkerToken) {
+    const response = await fetch(mailWorkerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${mailWorkerToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        subject,
+        text,
+        html,
+        from: fromAddress,
+        replyTo,
+      }),
+    });
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(message || "Pengiriman email gagal.");
+    }
+    return;
+  }
+
+  const transporter = ensureTransporter();
+  await transporter.sendMail({
+    from: fromAddress,
+    to,
     subject,
     text,
     html,
