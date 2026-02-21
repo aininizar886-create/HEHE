@@ -17,6 +17,9 @@ const buildStaticMapUrl = (lat: number, lon: number, host: string) => {
 const buildYandexStaticMapUrl = (lat: number, lon: number) =>
   `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&size=640,360&z=15&l=map&pt=${lon},${lat},pm2rdm`;
 
+const buildWikimediaStaticMapUrl = (lat: number, lon: number) =>
+  `https://maps.wikimedia.org/img/osm-intl,15,${lon},${lat},640x360.png`;
+
 const fetchRemote = async (url: string) => {
   const response = await fetch(url, {
     headers: {
@@ -44,6 +47,7 @@ export async function GET(request: Request) {
   const sources = [
     buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.fr"),
     buildYandexStaticMapUrl(lat, lon),
+    buildWikimediaStaticMapUrl(lat, lon),
     buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.de"),
   ];
 

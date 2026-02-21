@@ -1034,6 +1034,8 @@ type ChatBubbleProps = {
 
 const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, senderLabel, onShareClick }: ChatBubbleProps) => {
   const isCompactShare = share && (share.kind === "note" || share.kind === "reminder");
+  const isLocationShare = share?.kind === "location";
+  const mapLink = isLocationShare && share?.meta ? share.meta : null;
   const compactLabel =
     share?.kind === "note" ? "Buka di Notes" : share?.kind === "reminder" ? "Buka di Reminders" : "Buka detail";
   return (
@@ -1060,10 +1062,12 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
       } ${tone}`}
       >
         {share ? (
-          <button
-            type="button"
-            onClick={() => (onShareClick ? onShareClick(share) : undefined)}
-            className={`w-full text-left ${onShareClick ? "cursor-pointer" : "cursor-default"}`}
+          <div
+            role={isLocationShare ? undefined : "button"}
+            onClick={
+              isLocationShare ? undefined : () => (onShareClick ? onShareClick(share) : undefined)
+            }
+            className={`w-full text-left ${!isLocationShare && onShareClick ? "cursor-pointer" : "cursor-default"}`}
             aria-label="Buka item yang dibagikan"
           >
             <div className="space-y-2">
@@ -1086,22 +1090,29 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
                   {share.imageSrc && (
                     <div className="relative h-36 w-full overflow-hidden rounded-xl">
                       {share.kind === "location" ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- static map hotlink works best with raw img.
-                        <img
-                          src={share.imageSrc}
-                          alt={share.title}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="h-36 w-full object-cover"
-                          onError={(event) => {
-                            const target = event.currentTarget;
-                            const stage = target.dataset.fallbackStage ?? "0";
-                            if (stage === "0") {
-                              target.dataset.fallbackStage = "1";
-                              target.src = createMapFallbackSvg("Preview lokasi gagal dimuat");
-                            }
-                          }}
-                        />
+                        <a
+                          href={mapLink ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-36 w-full"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- static map hotlink works best with raw img. */}
+                          <img
+                            src={share.imageSrc}
+                            alt={share.title}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="h-36 w-full object-cover"
+                            onError={(event) => {
+                              const target = event.currentTarget;
+                              const stage = target.dataset.fallbackStage ?? "0";
+                              if (stage === "0") {
+                                target.dataset.fallbackStage = "1";
+                                target.src = createMapFallbackSvg(share.body || "Buka Maps");
+                              }
+                            }}
+                          />
+                        </a>
                       ) : (
                         <Image
                           src={share.imageSrc}
@@ -1129,13 +1140,25 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
                   >
                     <p className="text-sm font-semibold">{share.title}</p>
                     <p className="mt-1 text-xs whitespace-pre-wrap break-words">{share.body}</p>
-                    {share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
+                    {!isLocationShare && share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
+                    {isLocationShare && mapLink && (
+                      <a
+                        href={mapLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
+                          isMine ? "bg-black/15 text-black/80" : "bg-white/10 text-soft"
+                        }`}
+                      >
+                        Buka Maps
+                      </a>
+                    )}
                   </div>
                 </>
               )}
               {shareCaption && <p className="text-sm whitespace-pre-wrap break-words">{shareCaption}</p>}
             </div>
-          </button>
+          </div>
         ) : (
           <>
             {senderLabel && <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">{senderLabel}</p>}
@@ -3168,7 +3191,7 @@ export default function MelpinApp() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
-        const mapUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
         const mapImage = getStaticMapUrl(latitude, longitude);
         const payload: SharePayload = {
           kind: "location",
