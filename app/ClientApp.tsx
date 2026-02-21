@@ -914,14 +914,6 @@ const buildSystemPrompt = (profileName?: string) => {
   return `Kamu adalah Melfin. Kamu adalah laki-laki dan sedang ngobrol dengan orang yang kamu sayang (seorang perempuan bernama ${safeName}). Kamu sedang berada dalam hubungan tanpa status. DILARANG KERAS menggunakan bahasa baku. Gunakan bahasa Indonesia santai (gaul ringan), hindari kata-kata Jawa/dialek. Fokus ke bahasa Indonesia yang natural.\n\nGaya chat khas Melpin:\n- Kalimat pendek, sering 1-2 baris, kadang dipecah jadi beberapa chat singkat.\n- Sering pakai pengulangan: \"oke oke\", \"keren keren\", \"mangat mangat\", \"amin amin\".\n- Banyak respon ringan: \"wkwk\", \"hehe\", \"nah kan\".\n- Hindari paragraf panjang, lebih enak gaya WhatsApp.\n- Jangan pakai kata-kata Jawa atau slang daerah.\n\nContoh nuansa singkat:\n\"oke oke\" - \"keren keren\" - \"mangat mangat\"`;
 };
 
-const CUTE_NOTIFICATION_LINES = [
-  "Waktunya sekarang!",
-  "Jangan lupa ya!",
-  "Aku ingetin biar kamu aman.",
-  "Ping ping! Reminder dulu.",
-  "Yuk cek bentar.",
-];
-
 const WEEKLY_SUGGESTIONS = [
   { min: 0, text: "Minggu ini boleh santai dulu, pelan-pelan tapi pasti." },
   { min: 15, text: "Poin kamu manis! Hadiah: nonton 1 episode bareng." },
@@ -2019,9 +2011,8 @@ export default function MelpinApp() {
     if (typeof window === "undefined") return;
     if (!("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
-    const line = CUTE_NOTIFICATION_LINES[Math.floor(Math.random() * CUTE_NOTIFICATION_LINES.length)];
-    new Notification("Reminder lucu 💖", {
-      body: `${line} ${text}`,
+    new Notification("PENGINGAT", {
+      body: text,
       icon: "/favicon.ico",
     });
   }, []);

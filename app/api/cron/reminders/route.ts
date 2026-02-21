@@ -111,7 +111,7 @@ const handleCron = async (request: Request) => {
       });
 
       const payload = {
-        title: "Reminder Melpin",
+        title: "PENGINGAT",
         body: reminder.text,
         url: `${getBaseUrl()}/?reminder=${reminder.id}`,
       };
@@ -221,9 +221,9 @@ const handleCron = async (request: Request) => {
     const already = sentMap.get(userId) ?? new Set<string>();
     const hasSent = (kind: string) => already.has(`${userNow.dateKey}:${kind}`);
 
-    const deliver = async (kind: string, title: string, body: string) => {
+    const deliver = async (kind: string, body: string) => {
       if (hasSent(kind)) return;
-      const payload = { title, body, url: `${getBaseUrl()}?calendar=${userNow.dateKey}` };
+      const payload = { title: "PENGINGAT", body, url: `${getBaseUrl()}?calendar=${userNow.dateKey}` };
       const sendResults = await Promise.all(
         entry.subs.map(async (sub) => {
           try {
@@ -253,27 +253,19 @@ const handleCron = async (request: Request) => {
 
     if (isRamadan) {
       if (isWithinRange(userNow.minutes, 3 * 60 + 30, 5, 8)) {
-        await deliver(
-          "sahur-0330",
-          "Selamat Sahur 🌙",
-          `Waktunya sahur! Imsak jam ${schedule.times.imsak ?? "--"}.`
-        );
+        await deliver("sahur-0330", `Waktunya sahur! Imsak jam ${schedule.times.imsak ?? "--"}.`);
       }
       if (isWithinRange(userNow.minutes, 4 * 60 + 15, 5, 8)) {
-        await deliver(
-          "sahur-0415",
-          "Sahur Reminder ✨",
-          `Sahur terakhir ya! Imsak jam ${schedule.times.imsak ?? "--"}.`
-        );
+        await deliver("sahur-0415", `Sahur terakhir ya! Imsak jam ${schedule.times.imsak ?? "--"}.`);
       }
       const maghribMinutes = parseMinutes(schedule.times.maghrib);
       if (maghribMinutes && isWithinRange(userNow.minutes, maghribMinutes, 5, 20)) {
-        await deliver("buka", "Waktunya Berbuka ✨", `Maghrib jam ${schedule.times.maghrib ?? "--"}.`);
+        await deliver("buka", `Maghrib jam ${schedule.times.maghrib ?? "--"}.`);
       }
     }
 
     if (holidayToday && userNow.minutes >= 7 * 60) {
-      await deliver("holiday", "Libur Nasional 🎉", `Hari ini libur ${holidayToday.name}.`);
+      await deliver("holiday", `Hari ini libur ${holidayToday.name}.`);
     }
   }
 
