@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { supabaseAnon } from "@/lib/supabase";
+import { prisma } from "@/lib/db";
+import { createMagicLinkToken } from "@/lib/auth";
+import { sendMagicLinkEmail } from "@/lib/email";
 
 export async function POST(request: Request) {
   let payload: { email?: string } = {};
@@ -15,15 +17,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email tidak valid." }, { status: 400 });
   }
 
-  const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/` : undefined;
-  const { error } = await supabaseAnon.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: redirectTo,
-    },
-  });
-  if (error) {
-    return NextResponse.json({ error: error.message || "Gagal mengirim magic link." }, { status: 500 });
-  }
+  const user =
+    (await prisma.user.findUnique({ where: { email } })) ??
+    (await prisma.user.create({ data: { email } }));
+
+  const { token } = await createMagicLinkToken(user.id);
+  await sendMagicLinkEmail(email, token);
+
   return NextResponse.json({ ok: true });
 }

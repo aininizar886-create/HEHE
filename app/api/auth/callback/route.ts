@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { createSession, setSessionCookie } from "@/lib/auth";
+import { consumeMagicLinkToken, createSession, setSessionCookie } from "@/lib/auth";
 import { supabaseAnon } from "@/lib/supabase";
 
 const getBaseUrl = () => {
@@ -12,7 +12,24 @@ const getBaseUrl = () => {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const token = url.searchParams.get("token") ?? "";
   const accessToken = url.searchParams.get("access_token") ?? "";
+
+  if (token) {
+    const userId = await consumeMagicLinkToken(token);
+    if (!userId) {
+      return NextResponse.redirect(`${getBaseUrl()}/?login=expired`);
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return NextResponse.redirect(`${getBaseUrl()}/?login=invalid`);
+    }
+    const { token: sessionToken, expiresAt } = await createSession(user.id);
+    const response = NextResponse.redirect(`${getBaseUrl()}/?login=success`);
+    setSessionCookie(response, sessionToken, expiresAt);
+    return response;
+  }
+
   if (!accessToken) {
     return NextResponse.redirect(`${getBaseUrl()}/?login=invalid`);
   }
