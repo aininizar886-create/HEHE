@@ -6,6 +6,12 @@ import { getSessionUser } from "@/lib/auth";
 const getDisplayName = (user: { email: string; name?: string | null; profile?: { name?: string | null } | null }) =>
   user.profile?.name?.trim() || user.name?.trim() || user.email.split("@")[0];
 
+const getDisplayAvatar = (profile?: {
+  avatar?: string | null;
+  avatarImage?: string | null;
+  avatarAsset?: string | null;
+} | null) => profile?.avatarImage || profile?.avatarAsset || profile?.avatar || undefined;
+
 export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user) {
@@ -38,7 +44,7 @@ export async function GET(request: Request) {
     email: candidate.email,
     displayName: getDisplayName(candidate),
     status: candidate.profile?.status ?? undefined,
-    avatar: candidate.profile?.avatar ?? undefined,
+    avatar: getDisplayAvatar(candidate.profile),
   }));
 
   return NextResponse.json({ users: result });

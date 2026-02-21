@@ -6,13 +6,33 @@ import { getSessionUser } from "@/lib/auth";
 const getDisplayName = (user: { name?: string | null; email: string; profile?: { name?: string | null } | null }) =>
   user.profile?.name?.trim() || user.name?.trim() || user.email.split("@")[0];
 
+const getDisplayAvatar = (profile?: {
+  avatar?: string | null;
+  avatarImage?: string | null;
+  avatarAsset?: string | null;
+} | null) => profile?.avatarImage || profile?.avatarAsset || profile?.avatar || "💬";
+
 const buildThreadDisplay = (
   thread: {
     kind: "ai" | "realtime";
     title: string;
     subtitle: string;
     avatar: string;
-    participants: Array<{ userId: string; user: { id: string; email: string; name?: string | null; profile?: { name?: string | null; status?: string | null; avatar?: string | null } | null } }>;
+    participants: Array<{
+      userId: string;
+      user: {
+        id: string;
+        email: string;
+        name?: string | null;
+        profile?: {
+          name?: string | null;
+          status?: string | null;
+          avatar?: string | null;
+          avatarImage?: string | null;
+          avatarAsset?: string | null;
+        } | null;
+      };
+    }>;
   },
   currentUserId: string
 ) => {
@@ -37,7 +57,7 @@ const buildThreadDisplay = (
   return {
     displayTitle: getDisplayName(otherUser),
     displaySubtitle: otherUser.profile?.status ?? otherUser.email,
-    displayAvatar: otherUser.profile?.avatar ?? "💬",
+    displayAvatar: getDisplayAvatar(otherUser.profile),
     contactId: otherUser.id,
   };
 };
@@ -113,8 +133,18 @@ export async function POST(request: Request) {
 
   const kind = payload.kind === "ai" ? "ai" : "realtime";
   const contactEmail = typeof payload.contactEmail === "string" ? payload.contactEmail.trim().toLowerCase() : "";
-  let contactUser: { id: string; email: string; name?: string | null; profile?: { name?: string | null; status?: string | null; avatar?: string | null } | null } | null =
-    null;
+  let contactUser: {
+    id: string;
+    email: string;
+    name?: string | null;
+    profile?: {
+      name?: string | null;
+      status?: string | null;
+      avatar?: string | null;
+      avatarImage?: string | null;
+      avatarAsset?: string | null;
+    } | null;
+  } | null = null;
   if (contactEmail) {
     contactUser = await prisma.user.findUnique({
       where: { email: contactEmail },
@@ -157,7 +187,8 @@ export async function POST(request: Request) {
       : "Chat";
   const subtitle =
     typeof payload.subtitle === "string" ? payload.subtitle : contactUser?.profile?.status ?? "";
-  const avatar = typeof payload.avatar === "string" ? payload.avatar : contactUser?.profile?.avatar ?? "💬";
+  const avatar =
+    typeof payload.avatar === "string" ? payload.avatar : getDisplayAvatar(contactUser?.profile ?? null);
 
   const thread = await prisma.chatThread.create({
     data: {

@@ -743,6 +743,9 @@ const getAvatarEmoji = (name?: string) => {
   return AVATAR_EMOJIS[total % AVATAR_EMOJIS.length];
 };
 
+const isAvatarImage = (value?: string) =>
+  Boolean(value && (value.startsWith("data:image") || value.startsWith("http") || value.startsWith("/")));
+
 const readFileAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -1003,8 +1006,19 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
   return (
     <div className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
       {!isMine && avatar && (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-2/80 text-lg">
-          {avatar}
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-lg">
+          {isAvatarImage(avatar) ? (
+            <Image
+              src={avatar}
+              alt={senderLabel || "Avatar"}
+              width={32}
+              height={32}
+              className="h-full w-full rounded-full object-cover"
+              unoptimized
+            />
+          ) : (
+            avatar
+          )}
         </div>
       )}
       <div
@@ -4168,9 +4182,20 @@ export default function MelpinApp() {
                           onClick={() => createContactThread(item.email)}
                           className="flex w-full items-center gap-3 rounded-2xl border border-hot/20 bg-ink-2/60 px-3 py-2 text-left hover:bg-ink-2/80"
                         >
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-3/80 text-base">
-                            {item.avatar || "💬"}
-                          </div>
+                        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ink-3/80 text-base">
+                          {isAvatarImage(item.avatar) ? (
+                            <Image
+                              src={item.avatar!}
+                              alt={item.displayName}
+                              width={32}
+                              height={32}
+                              className="h-full w-full rounded-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            item.avatar || "💬"
+                          )}
+                        </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm text-white">{item.displayName}</p>
                             <p className="truncate text-[11px] text-slate">{item.status || item.email}</p>
@@ -4201,8 +4226,19 @@ export default function MelpinApp() {
                           isActive ? "bg-hot/15 border border-hot/30" : "border border-transparent hover:bg-ink-3/70"
                         }`}
                       >
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-2/80 text-xl">
-                          {thread.avatar}
+                        <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl">
+                          {isAvatarImage(thread.avatar) ? (
+                            <Image
+                              src={thread.avatar}
+                              alt={thread.title}
+                              width={44}
+                              height={44}
+                              className="h-full w-full rounded-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            thread.avatar
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
@@ -4249,8 +4285,19 @@ export default function MelpinApp() {
                 {activeThread ? (
                   <>
                     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-4 py-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-2/80 text-2xl">
-                        {activeThread.avatar}
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-2xl">
+                        {isAvatarImage(activeThread.avatar) ? (
+                          <Image
+                            src={activeThread.avatar}
+                            alt={activeThread.title}
+                            width={48}
+                            height={48}
+                            className="h-full w-full rounded-full object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          activeThread.avatar
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs text-slate">{activeThread.title}</p>
@@ -5622,8 +5669,19 @@ export default function MelpinApp() {
                   onClick={() => handleShareToThread(thread.id)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-3 py-3 text-left transition-all hover:bg-ink-3"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-2/80 text-lg">
-                    {thread.avatar}
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-lg">
+                    {isAvatarImage(thread.avatar) ? (
+                      <Image
+                        src={thread.avatar}
+                        alt={thread.title}
+                        width={40}
+                        height={40}
+                        className="h-full w-full rounded-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      thread.avatar
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{thread.title}</p>
