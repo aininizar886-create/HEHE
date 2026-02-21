@@ -113,6 +113,7 @@ type ChatThread = {
   subtitle: string;
   kind: "realtime" | "ai";
   avatar: string;
+  contactId?: string | null;
   pinned?: boolean;
   messages: ChatMessage[];
 };
@@ -907,6 +908,7 @@ const mapChatThreadFromServer = (thread: Record<string, unknown>, messages: Chat
       : typeof thread.avatar === "string"
       ? thread.avatar
       : "💬",
+  contactId: typeof thread.contactId === "string" ? thread.contactId : null,
   pinned: Boolean(thread.pinned),
   messages,
 });
@@ -1301,6 +1303,7 @@ export default function MelpinApp() {
   const [aiLoadingThread, setAiLoadingThread] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
+  const [onlineMap, setOnlineMap] = useState<Record<string, boolean>>({});
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -1418,6 +1421,22 @@ export default function MelpinApp() {
     },
     [loadServerData]
   );
+
+  const refreshThreadMeta = useCallback(async () => {
+    try {
+      const response = await apiJson<{ threads: Record<string, unknown>[] }>("/api/chats");
+      const nextThreads = (response.threads ?? []).map((thread) => {
+        const existing = chatThreadsRef.current.find((item) => item.id === thread.id);
+        return mapChatThreadFromServer(thread, existing?.messages ?? []);
+      });
+      setChatThreads(nextThreads);
+      setActiveThreadId((current) =>
+        nextThreads.some((item) => item.id === current) ? current : nextThreads[0]?.id ?? null
+      );
+    } catch {
+      // ignore refresh errors
+    }
+  }, []);
 
   const finalizeLogin = useCallback(async () => {
     const session = await apiJson<{ user: { id: string; profile?: Profile | null } | null }>("/api/session");
@@ -1638,6 +1657,66 @@ export default function MelpinApp() {
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
   }, [activeThreadId]);
+
+  const sendPresenceHeartbeat = useCallback(async () => {
+    if (!sessionUserIdRef.current) return;
+    try {
+      await fetch("/api/presence/heartbeat", { method: "POST", credentials: "include" });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const refreshOnlineStatus = useCallback(async () => {
+    const ids = new Set<string>();
+    chatThreadsRef.current.forEach((thread) => {
+      if (thread.kind === "realtime" && thread.contactId) ids.add(thread.contactId);
+    });
+    const idList = Array.from(ids);
+    if (!idList.length) return;
+    try {
+      const response = await apiJson<{ statuses: Array<{ id: string; online: boolean }> }>(
+        `/api/presence/status?ids=${encodeURIComponent(idList.join(","))}`
+      );
+      const next: Record<string, boolean> = {};
+      response.statuses?.forEach((item) => {
+        next[item.id] = Boolean(item.online);
+      });
+      setOnlineMap(next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    sendPresenceHeartbeat();
+    refreshOnlineStatus();
+    const heartbeatTimer = window.setInterval(() => {
+      sendPresenceHeartbeat();
+      refreshOnlineStatus();
+    }, 15000);
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        sendPresenceHeartbeat();
+        refreshOnlineStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+    return () => {
+      window.clearInterval(heartbeatTimer);
+      document.removeEventListener("visibilitychange", visibilityHandler);
+    };
+  }, [isLoggedIn, refreshOnlineStatus, sendPresenceHeartbeat]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    refreshThreadMeta();
+    const metaTimer = window.setInterval(() => {
+      refreshThreadMeta();
+    }, 15000);
+    return () => window.clearInterval(metaTimer);
+  }, [isLoggedIn, refreshThreadMeta]);
 
   useEffect(() => {
     if (chatRef.current) {
@@ -2370,6 +2449,7 @@ export default function MelpinApp() {
     })
       .then((result) => {
         setProfile(result.profile);
+        void refreshThreadMeta();
       })
       .catch(() => {
         showNotificationMessage("Gagal menyimpan profil ke server.");
@@ -3066,6 +3146,12 @@ export default function MelpinApp() {
     () => chatThreads.find((thread) => thread.id === activeThreadId) ?? chatThreads[0],
     [chatThreads, activeThreadId]
   );
+  const activeOnline = useMemo(() => {
+    if (!activeThread) return false;
+    if (activeThread.kind === "ai") return true;
+    if (activeThread.contactId) return Boolean(onlineMap[activeThread.contactId]);
+    return false;
+  }, [activeThread, onlineMap]);
 
   const activeDraft = useMemo(
     () => (activeThread ? chatDrafts[activeThread.id] ?? "" : ""),
@@ -4366,20 +4452,31 @@ export default function MelpinApp() {
                           isActive ? "bg-hot/15 border border-hot/30" : "border border-transparent hover:bg-ink-3/70"
                         }`}
                       >
-                        <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl">
+                      <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl">
+                        <div className="relative h-11 w-11">
                           {isAvatarImage(thread.avatar) ? (
                             <Image
                               src={thread.avatar}
                               alt={thread.title}
                               width={44}
                               height={44}
-                              className="h-full w-full rounded-full object-cover"
+                              className="h-11 w-11 rounded-full object-cover"
                               unoptimized
                             />
                           ) : (
-                            thread.avatar
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-2/80 text-xl">
+                              {thread.avatar}
+                            </div>
+                          )}
+                          {thread.kind === "realtime" && thread.contactId && (
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-ink-3 ${
+                                onlineMap[thread.contactId] ? "online-dot" : "offline-dot"
+                              }`}
+                            />
                           )}
                         </div>
+                      </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
                             <p className="truncate text-sm font-semibold text-white">{thread.title}</p>
@@ -4443,9 +4540,15 @@ export default function MelpinApp() {
                         <p className="text-xs text-slate">{activeThread.title}</p>
                         <p className="truncate text-sm font-semibold text-white">{activeThread.subtitle}</p>
                       </div>
-                      <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] text-emerald-200">
-                        <span className="online-dot" />
-                        {activeThread.kind === "ai" ? "Mentor online" : "Online"}
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] ${
+                          activeOnline
+                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                            : "border-slate-500/30 bg-slate-500/10 text-slate-200"
+                        }`}
+                      >
+                        <span className={activeOnline ? "online-dot" : "offline-dot"} />
+                        {activeThread.kind === "ai" ? "Mentor online" : activeOnline ? "Online" : "Offline"}
                       </span>
                       {activeThread.kind === "ai" && (
                         <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[11px] text-cyan-200">

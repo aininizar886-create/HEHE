@@ -232,6 +232,14 @@ optgroup {
   animation: online-pulse 2s ease-out infinite;
 }
 
+.offline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #64748b;
+  box-shadow: 0 0 0 rgba(100, 116, 139, 0.35);
+}
+
 .note-pattern {
   position: absolute;
   inset: 0;
