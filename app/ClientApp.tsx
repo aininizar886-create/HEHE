@@ -364,6 +364,7 @@ const DEFAULT_ACCENT_SOFTNESS = 55;
 
 const REMINDER_POINTS = 2;
 const WEEKLY_POINT_TARGET = 50;
+const NOTIF_NUDGE_KEY = "melpin_notification_nudge_seen";
 
 const readStorage = <T,>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;
@@ -1238,6 +1239,9 @@ export default function MelpinApp() {
   const notificationTimersRef = useRef<Map<string, number>>(new Map());
   const notificationClearRef = useRef<number | null>(null);
   const notificationPromptedRef = useRef(false);
+  const [notificationNudged, setNotificationNudged] = useState(() =>
+    readStorage<boolean>(NOTIF_NUDGE_KEY, false)
+  );
 
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(getInitialChatThreads);
   const [activeThreadId, setActiveThreadId] = useState(() => getInitialChatThreads()[0]?.id ?? null);
@@ -2007,12 +2011,17 @@ export default function MelpinApp() {
     if (Notification.permission === "denied") {
       setNotificationState("denied");
       showNotificationMessage("Notifikasi diblokir. Aktifkan dulu di setting ya.");
+      setNotificationNudged(true);
+      writeStorage(NOTIF_NUDGE_KEY, true);
       return "denied";
     }
     try {
       const permission = await Notification.requestPermission();
       setNotificationState(permission);
-      showNotificationMessage(permission === "granted" ? "Notifikasi aktif!" : "Notifikasi ditolak.");
+      const allowed = permission === "granted";
+      showNotificationMessage(allowed ? "Notifikasi aktif!" : "Notifikasi ditolak.");
+      setNotificationNudged(true);
+      writeStorage(NOTIF_NUDGE_KEY, true);
       if (permission === "granted") {
         await ensurePushSubscription();
       }
@@ -2029,11 +2038,8 @@ export default function MelpinApp() {
     if (notificationState !== "default") return;
     if (notificationPromptedRef.current) return;
     notificationPromptedRef.current = true;
-    const timer = window.setTimeout(() => {
-      requestNotificationPermission().catch(() => undefined);
-    }, 600);
-    return () => window.clearTimeout(timer);
-  }, [isLoggedIn, notificationState, requestNotificationPermission]);
+    // Jangan auto-trigger requestPermission tanpa gesture agar tidak diblok browser.
+  }, [isLoggedIn, notificationState]);
 
   useEffect(() => {
     if (!calendarToday) return;
@@ -3871,6 +3877,11 @@ export default function MelpinApp() {
                       >
                         Aktifkan notifikasi
                       </button>
+                    )}
+                    {!notificationNudged && notificationState !== "granted" && (
+                      <span className="rounded-full border border-hot/10 bg-ink-2/70 px-2 py-0.5 text-[10px] text-slate">
+                        Tap dulu untuk izin notifikasi (wajib klik).
+                      </span>
                     )}
                     <button
                       type="button"
