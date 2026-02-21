@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Note" ADD COLUMN     "font" TEXT NOT NULL DEFAULT 'body',
+ADD COLUMN     "fontSize" INTEGER NOT NULL DEFAULT 15,
+ADD COLUMN     "pattern" TEXT NOT NULL DEFAULT 'none';

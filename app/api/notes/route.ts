@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+
+import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+
+const parseStringArray = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+
+export async function GET() {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const notes = await prisma.note.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  return NextResponse.json({ notes });
+}
+
+export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Format request tidak valid." }, { status: 400 });
+  }
+
+  const title = typeof payload.title === "string" ? payload.title : "";
+  const text = typeof payload.text === "string" ? payload.text : "";
+  const type = payload.type === "checklist" ? "checklist" : "text";
+  const checklist = Array.isArray(payload.checklist) ? payload.checklist : [];
+
+  const note = await prisma.note.create({
+    data: {
+      userId: user.id,
+      title,
+      text,
+      type,
+      checklist,
+      mood: typeof payload.mood === "string" ? payload.mood : null,
+      tags: parseStringArray(payload.tags),
+      color: typeof payload.color === "string" ? payload.color : "rose",
+      pattern: typeof payload.pattern === "string" ? payload.pattern : "none",
+      font: typeof payload.font === "string" ? payload.font : "body",
+      fontSize: typeof payload.fontSize === "number" ? payload.fontSize : 15,
+      pinned: Boolean(payload.pinned),
+      favorite: Boolean(payload.favorite),
+      archived: Boolean(payload.archived),
+      energy: typeof payload.energy === "number" ? payload.energy : 60,
+    },
+  });
+
+  return NextResponse.json({ note }, { status: 201 });
+}

@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum NoteType {
+  text
+  checklist
+}
+
+enum ChatKind {
+  realtime
+  ai
+}
+
+enum ChatSender {
+  me
+  melfin
+  assistant
+}
+
+enum ChatMessageKind {
+  text
+  share
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  passwordHash  String?
+  name          String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  profile        Profile?
+  sessions       Session[]
+  magicTokens    MagicLinkToken[]
+  notes          Note[]
+  reminders      Reminder[]
+  galleryItems   GalleryItem[]
+  chatThreads    ChatThread[]
+  chatParticipants ChatParticipant[]
+  sentMessages     ChatMessage[] @relation("ChatMessageSender")
+  weeklyPoints   WeeklyPoint[]
+  terminalEvents TerminalEvent[]
+  pushSubs       PushSubscription[]
+  calendarNotifications CalendarNotification[]
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  name           String?
+  birthDate      String?
+  status         String?
+  bio            String?
+  avatar         String?
+  avatarImage    String?
+  avatarAsset    String?
+  accentColor    String?
+  accentSoftness Int?
+  terminalHost   String?
+  terminalName   String?
+  prayerCityId   String?
+  prayerCityName String?
+  timezone       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MagicLinkToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  text      String
+  type      NoteType
+  checklist Json
+  mood      String?
+  tags      String[]
+  color     String
+  pattern   String   @default("none")
+  font      String   @default("body")
+  fontSize  Int      @default(15)
+  pinned    Boolean  @default(false)
+  favorite  Boolean  @default(false)
+  archived  Boolean  @default(false)
+  energy    Int      @default(60)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  userId        String
+  text          String
+  done          Boolean  @default(false)
+  date          String?
+  time          String?
+  scheduledAt   DateTime?
+  notified      Boolean  @default(false)
+  pointsWeekKey String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GalleryItem {
+  id         String   @id @default(cuid())
+  userId     String
+  blobUrl    String
+  name       String
+  caption    String
+  tags       String[]
+  favorite   Boolean  @default(false)
+  memoryDate String?
+  addedAt    DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChatThread {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  subtitle  String
+  kind      ChatKind
+  avatar    String
+  pinned    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages ChatMessage[]
+  participants ChatParticipant[]
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id           String          @id @default(cuid())
+  threadId     String
+  from         ChatSender
+  senderId     String?
+  text         String
+  kind         ChatMessageKind @default(text)
+  share        Json?
+  shareCaption String?
+  timestamp    DateTime        @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User?      @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  threadId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+}
+
+model WeeklyPoint {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+}
+
+model TerminalEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  command   String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CalendarNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String
+  kind      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, kind])
+}
