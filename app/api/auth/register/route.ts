@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { createSession, setSessionCookie } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, supabaseAnon } from "@/lib/supabase";
 
 const MIN_PASSWORD_LEN = 8;
 
@@ -25,11 +25,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Password minimal ${MIN_PASSWORD_LEN} karakter.` }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return NextResponse.json({ error: "Email sudah terdaftar." }, { status: 409 });
-  }
-
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
@@ -37,7 +32,29 @@ export async function POST(request: Request) {
     user_metadata: { name },
   });
   if (error || !data.user) {
-    return NextResponse.json({ error: error?.message ?? "Gagal membuat akun." }, { status: 400 });
+    const message = error?.message ?? "Gagal membuat akun.";
+    const normalized = message.toLowerCase();
+    if (normalized.includes("already") || normalized.includes("registered")) {
+      const loginAttempt = await supabaseAnon.auth.signInWithPassword({ email, password });
+      if (!loginAttempt.error && loginAttempt.data.user) {
+        const user = await prisma.user.upsert({
+          where: { email },
+          update: { name: name || undefined },
+          create: { email, name },
+        });
+        const { token, expiresAt } = await createSession(user.id);
+        const response = NextResponse.json({
+          user: { id: user.id, email: user.email, name: user.name },
+        });
+        setSessionCookie(response, token, expiresAt);
+        return response;
+      }
+      return NextResponse.json(
+        { error: "Email sudah terdaftar. Gunakan login atau magic link." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
   const user = await prisma.user.upsert({
