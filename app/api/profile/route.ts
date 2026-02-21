@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
+
+const CACHE_TTL_MS = 2000;
 
 export async function GET() {
   const user = await getSessionUser();
@@ -9,8 +12,21 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const cacheKey = `profile:${user.id}`;
+  const cached = getCached<Record<string, unknown> | null>(cacheKey, CACHE_TTL_MS);
+  if (cached !== undefined) {
+    return NextResponse.json(
+      { profile: cached },
+      { headers: { "Cache-Control": "private, max-age=2" } }
+    );
+  }
+
   const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
-  return NextResponse.json({ profile });
+  setCached(cacheKey, profile);
+  return NextResponse.json(
+    { profile },
+    { headers: { "Cache-Control": "private, max-age=2" } }
+  );
 }
 
 export async function PUT(request: Request) {
@@ -52,5 +68,7 @@ export async function PUT(request: Request) {
     update: data,
   });
 
+  invalidateCache(`profile:${user.id}`);
+  invalidateCache(`session:${user.id}`);
   return NextResponse.json({ profile });
 }

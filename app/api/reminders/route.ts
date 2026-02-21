@@ -23,7 +23,7 @@ export async function GET() {
 
   const cacheKey = `reminders:${user.id}`;
   const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
-  if (cached) {
+  if (cached !== undefined) {
     return NextResponse.json(
       { reminders: cached },
       { headers: { "Cache-Control": "private, max-age=5" } }

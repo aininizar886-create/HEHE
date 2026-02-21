@@ -17,7 +17,7 @@ export async function GET() {
 
   const cacheKey = `gallery:${user.id}`;
   const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
-  if (cached) {
+  if (cached !== undefined) {
     return NextResponse.json(
       { items: cached },
       { headers: { "Cache-Control": "private, max-age=5" } }

@@ -73,7 +73,7 @@ export async function GET() {
 
   const cacheKey = `chats:${user.id}`;
   const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
-  if (cached) {
+  if (cached !== undefined) {
     return NextResponse.json(
       { threads: cached },
       { headers: { "Cache-Control": "private, max-age=2" } }

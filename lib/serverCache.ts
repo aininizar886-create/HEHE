@@ -4,12 +4,12 @@ type CacheEntry<T> = { data: T; at: number };
 
 const cacheStore = new Map<string, CacheEntry<unknown>>();
 
-export const getCached = <T>(key: string, ttlMs: number): T | null => {
+export const getCached = <T>(key: string, ttlMs: number): T | undefined => {
   const entry = cacheStore.get(key);
-  if (!entry) return null;
+  if (!entry) return undefined;
   if (Date.now() - entry.at > ttlMs) {
     cacheStore.delete(key);
-    return null;
+    return undefined;
   }
   return entry.data as T;
 };
