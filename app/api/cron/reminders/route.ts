@@ -75,27 +75,7 @@ const fetchPrayerSchedule = async (cityId: string) => {
   return { dateKey, times, cityName: payload.data.kabko || DEFAULT_CITY.name };
 };
 
-const RAMADAN_START_DATE = process.env.RAMADAN_START_DATE;
-const RAMADAN_DAYS = Number(process.env.RAMADAN_DAYS ?? "30");
-
-const toUtcDay = (dateKey: string) => {
-  const [year, month, day] = dateKey.split("-").map((part) => Number(part));
-  if (!year || !month || !day) return null;
-  return Date.UTC(year, month - 1, day);
-};
-
-const getGovernmentRamadanDay = (dateKey: string) => {
-  if (!RAMADAN_START_DATE) return null;
-  const start = toUtcDay(RAMADAN_START_DATE);
-  const current = toUtcDay(dateKey);
-  if (start === null || current === null) return null;
-  const diffDays = Math.floor((current - start) / (1000 * 60 * 60 * 24)) + 1;
-  if (diffDays < 1 || diffDays > RAMADAN_DAYS) return null;
-  return diffDays;
-};
-
 const isRamadanDate = (dateKey: string, timeZone: string) => {
-  if (getGovernmentRamadanDay(dateKey) !== null) return true;
   const date = new Date(`${dateKey}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
   const parts = new Intl.DateTimeFormat("id-ID-u-ca-islamic", {
@@ -273,14 +253,23 @@ const handleCron = async (request: Request) => {
 
     if (isRamadan) {
       if (isWithinRange(userNow.minutes, 3 * 60 + 30, 5, 8)) {
-        await deliver("sahur-0330", `Waktunya sahur! Imsak jam ${schedule.times.imsak ?? "--"}.`);
+        await deliver(
+          "sahur-0330",
+          `Semangat puasanya! Waktunya sahur, imsak jam ${schedule.times.imsak ?? "--"}.`
+        );
       }
       if (isWithinRange(userNow.minutes, 4 * 60 + 15, 5, 8)) {
-        await deliver("sahur-0415", `Sahur terakhir ya! Imsak jam ${schedule.times.imsak ?? "--"}.`);
+        await deliver(
+          "sahur-0415",
+          `Semangat puasanya! Sahur terakhir ya, imsak jam ${schedule.times.imsak ?? "--"}.`
+        );
       }
       const maghribMinutes = parseMinutes(schedule.times.maghrib);
       if (maghribMinutes && isWithinRange(userNow.minutes, maghribMinutes, 5, 20)) {
-        await deliver("buka", `Maghrib jam ${schedule.times.maghrib ?? "--"}.`);
+        await deliver(
+          "buka",
+          `Semangat puasanya! Waktunya berbuka, maghrib jam ${schedule.times.maghrib ?? "--"}.`
+        );
       }
     }
 

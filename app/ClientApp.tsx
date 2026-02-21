@@ -1124,6 +1124,7 @@ export default function MelpinApp() {
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
   const [authStatus, setAuthStatus] = useState("");
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [setupName, setSetupName] = useState(() => readStorage<Profile | null>(STORAGE_KEYS.profile, null)?.name ?? "");
   const [setupBirth, setSetupBirth] = useState(
@@ -1180,6 +1181,8 @@ export default function MelpinApp() {
     return DEFAULT_TIMEZONE;
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
 
   const [now, setNow] = useState(() => new Date());
   const [calendarToday, setCalendarToday] = useState<CalendarToday | null>(null);
@@ -1194,6 +1197,9 @@ export default function MelpinApp() {
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(() =>
     migrateGallery(readStorage(STORAGE_KEYS.gallery, []))
   );
+  const [isNoteCreating, setIsNoteCreating] = useState(false);
+  const [isReminderCreating, setIsReminderCreating] = useState(false);
+  const [isGalleryUploading, setIsGalleryUploading] = useState(false);
   const [weeklyPoints, setWeeklyPoints] = useState<WeeklyPoints>(initWeeklyPoints);
   const addWeeklyPoints = useCallback((amount: number) => {
     setWeeklyPoints((prev) => {
@@ -1222,6 +1228,7 @@ export default function MelpinApp() {
   const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
   const [chatSearch, setChatSearch] = useState("");
   const [aiLoadingThread, setAiLoadingThread] = useState<string | null>(null);
+  const [isChatSending, setIsChatSending] = useState(false);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -2155,6 +2162,7 @@ export default function MelpinApp() {
 
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isAuthLoading) return;
     setAuthStatus("");
     const email = authEmail.trim().toLowerCase();
     if (!email) {
@@ -2163,6 +2171,7 @@ export default function MelpinApp() {
     }
 
     try {
+      setIsAuthLoading(true);
       if (authMode === "magic") {
         await apiJson("/api/auth/request-link", {
           method: "POST",
@@ -2196,12 +2205,16 @@ export default function MelpinApp() {
       await finalizeLogin();
     } catch (error) {
       setAuthStatus(error instanceof Error ? error.message : "Login gagal.");
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
   const handleSetupSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!setupName.trim()) return;
+    if (isProfileSaving) return;
+    setIsProfileSaving(true);
     apiJson<{ profile: Profile }>("/api/profile", {
       method: "PUT",
       body: JSON.stringify({
@@ -2227,6 +2240,9 @@ export default function MelpinApp() {
       })
       .catch(() => {
         showNotificationMessage("Gagal menyimpan profil.");
+      })
+      .finally(() => {
+        setIsProfileSaving(false);
       });
   };
 
@@ -2259,6 +2275,8 @@ export default function MelpinApp() {
   const handleProfileSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!setupName.trim()) return;
+    if (isProfileSaving) return;
+    setIsProfileSaving(true);
     apiJson<{ profile: Profile }>("/api/profile", {
       method: "PUT",
       body: JSON.stringify({
@@ -2284,6 +2302,9 @@ export default function MelpinApp() {
       })
       .catch(() => {
         showNotificationMessage("Gagal menyimpan profil.");
+      })
+      .finally(() => {
+        setIsProfileSaving(false);
       });
   };
 
@@ -2326,6 +2347,7 @@ export default function MelpinApp() {
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setIsAvatarUploading(true);
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setSetupAvatarImage(dataUrl);
@@ -2333,6 +2355,7 @@ export default function MelpinApp() {
     } catch {
       showNotificationMessage("Gagal upload avatar. Coba file lain ya.");
     } finally {
+      setIsAvatarUploading(false);
       event.target.value = "";
     }
   };
@@ -2457,6 +2480,7 @@ export default function MelpinApp() {
     const draft = chatDrafts[thread.id] ?? "";
     const trimmed = draft.trim();
     if (!trimmed) return;
+    if (isChatSending) return;
 
     const userMessage: ChatMessage = {
       id: makeId(),
@@ -2473,10 +2497,13 @@ export default function MelpinApp() {
     handleChatDraftChange(thread.id, "");
 
     try {
+      setIsChatSending(true);
       const saved = await persistChatMessage(thread.id, userMessage);
       replaceChatMessage(thread.id, userMessage.id, saved);
     } catch {
       showNotificationMessage("Gagal mengirim chat.");
+    } finally {
+      setIsChatSending(false);
     }
 
     if (thread.kind === "ai") {
@@ -2559,6 +2586,8 @@ export default function MelpinApp() {
   };
 
   const handleAddNote = async (templateId?: string) => {
+    if (isNoteCreating) return;
+    setIsNoteCreating(true);
     const template = NOTE_TEMPLATES.find((item) => item.id === templateId);
     const newNote = createNote({
       title: template?.title ?? "Catatan Baru",
@@ -2566,10 +2595,16 @@ export default function MelpinApp() {
       mood: template?.mood,
       type: template?.type ?? "text",
     });
-    await createNoteOnServer(newNote);
+    try {
+      await createNoteOnServer(newNote);
+    } finally {
+      setIsNoteCreating(false);
+    }
   };
 
   const handleDuplicateNote = async (note: Note) => {
+    if (isNoteCreating) return;
+    setIsNoteCreating(true);
     const clone = createNote({
       ...note,
       id: makeId(),
@@ -2578,7 +2613,11 @@ export default function MelpinApp() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-    await createNoteOnServer(clone);
+    try {
+      await createNoteOnServer(clone);
+    } finally {
+      setIsNoteCreating(false);
+    }
   };
 
   const scheduleNoteSave = (id: string, patch: Partial<Note>) => {
@@ -2660,9 +2699,11 @@ export default function MelpinApp() {
   };
 
   const handleCreateFromPrompt = () => {
+    if (isNoteCreating) return;
+    setIsNoteCreating(true);
     const prompt = NOTE_PROMPTS[notePromptIndex] ?? NOTE_PROMPTS[0];
     const newNote = createNote({ title: "Curhat Prompt", text: `${prompt}\n`, mood: "soft" });
-    void createNoteOnServer(newNote);
+    createNoteOnServer(newNote).finally(() => setIsNoteCreating(false));
   };
 
   const handleToggleNoteExpand = (id: string) => {
@@ -2695,6 +2736,7 @@ export default function MelpinApp() {
 
   const handleAddReminder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isReminderCreating) return;
     const form = event.currentTarget;
     const input = form.elements.namedItem("reminder") as HTMLInputElement | null;
     const timeInput = form.elements.namedItem("reminderTime") as HTMLInputElement | null;
@@ -2707,10 +2749,12 @@ export default function MelpinApp() {
       showNotificationMessage("Tanggal dan jam wajib diisi ya.");
       return;
     }
+    setIsReminderCreating(true);
     await requestNotificationPermission();
     const scheduledAt = getScheduledAtForDateTime(date, time);
     if (!scheduledAt || scheduledAt <= Date.now()) {
       showNotificationMessage("Waktunya harus di masa depan ya.");
+      setIsReminderCreating(false);
       return;
     }
     try {
@@ -2729,6 +2773,8 @@ export default function MelpinApp() {
       setReminders((prev) => [saved, ...prev]);
     } catch {
       showNotificationMessage("Gagal menambahkan reminder.");
+    } finally {
+      setIsReminderCreating(false);
     }
     form.reset();
   };
@@ -2783,6 +2829,7 @@ export default function MelpinApp() {
   const handleGalleryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
+    setIsGalleryUploading(true);
     try {
       const items = await Promise.all(
         files.map(async (file) =>
@@ -2817,6 +2864,7 @@ export default function MelpinApp() {
     } catch {
       showNotificationMessage("Gagal upload foto. Coba file lain ya.");
     } finally {
+      setIsGalleryUploading(false);
       event.target.value = "";
     }
   };
@@ -3091,10 +3139,10 @@ export default function MelpinApp() {
       {currentView === "login" && (
         <div className="flex min-h-screen items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
           <div className="glass animate-reveal w-full max-w-md rounded-[32px] p-6 sm:p-8">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-hot/20 text-hot">
-                <Heart size={26} />
-              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-hot/20 text-hot">
+                  <Heart size={26} />
+                </div>
               <div>
                 <h1 className="font-display text-xl text-white sm:text-2xl">The Gate</h1>
                 <p className="text-sm text-slate">Login dulu biar data kamu nyangkut aman.</p>
@@ -3158,11 +3206,23 @@ export default function MelpinApp() {
               {isBootstrapping && <p className="text-xs text-slate">Cek sesi dulu ya...</p>}
               <button
                 type="submit"
+                disabled={isAuthLoading}
                 data-anim={authMode === "register" ? "signup" : authMode === "login" ? "signin" : "magic"}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-3 font-semibold text-black transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,20,147,0.6)]"
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-3 font-semibold text-black transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,20,147,0.6)] ${
+                  isAuthLoading ? "cursor-not-allowed opacity-70" : ""
+                }`}
               >
-                <LogIn size={18} />
-                {authMode === "magic" ? "Kirim Magic Link" : authMode === "register" ? "Daftar" : "Masuk"}
+                {isAuthLoading ? (
+                  <span className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                    Memproses...
+                  </span>
+                ) : (
+                  <>
+                    <LogIn size={18} />
+                    {authMode === "magic" ? "Kirim Magic Link" : authMode === "register" ? "Daftar" : "Masuk"}
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -3206,7 +3266,7 @@ export default function MelpinApp() {
                   <div className="flex flex-wrap gap-2">
                     <label className="cursor-pointer rounded-full border border-hot/30 px-3 py-2 text-xs text-soft transition-all hover:bg-ink-3">
                       <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                      Upload Foto
+                      {isAvatarUploading ? "Uploading..." : "Upload Foto"}
                     </label>
                     {(setupAvatarImage || setupAvatarAsset) && (
                       <button
@@ -3451,10 +3511,22 @@ export default function MelpinApp() {
               </div>
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-3 font-semibold text-black transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,20,147,0.6)]"
+                disabled={isProfileSaving}
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-3 font-semibold text-black transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,20,147,0.6)] ${
+                  isProfileSaving ? "cursor-not-allowed opacity-70" : ""
+                }`}
               >
-                <Sparkles size={18} />
-                Simpan Profil
+                {isProfileSaving ? (
+                  <span className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                    Menyimpan...
+                  </span>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    Simpan Profil
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -3575,9 +3647,13 @@ export default function MelpinApp() {
                           <p className="mt-1">Bisa pakai foto, emoji, atau asset chubby nanti.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <label className="cursor-pointer rounded-full border border-hot/30 px-3 py-2 text-xs text-soft transition-all hover:bg-ink-3">
+                          <label
+                            className={`cursor-pointer rounded-full border border-hot/30 px-3 py-2 text-xs text-soft transition-all hover:bg-ink-3 ${
+                              isAvatarUploading ? "opacity-70" : ""
+                            }`}
+                          >
                             <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                            Upload Foto
+                            {isAvatarUploading ? "Uploading..." : "Upload Foto"}
                           </label>
                           {(setupAvatarImage || setupAvatarAsset) && (
                             <button
@@ -3815,9 +3891,19 @@ export default function MelpinApp() {
                     <div className="flex flex-wrap gap-3">
                       <button
                         type="submit"
-                        className="rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105"
+                        disabled={isProfileSaving}
+                        className={`rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105 ${
+                          isProfileSaving ? "cursor-not-allowed opacity-70" : ""
+                        }`}
                       >
-                        Simpan
+                        {isProfileSaving ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                            Menyimpan...
+                          </span>
+                        ) : (
+                          "Simpan"
+                        )}
                       </button>
                       <button
                         type="button"
@@ -4129,6 +4215,10 @@ export default function MelpinApp() {
                         <p className="text-xs text-slate">{activeThread.title}</p>
                         <p className="truncate text-sm font-semibold text-white">{activeThread.subtitle}</p>
                       </div>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] text-emerald-200">
+                        <span className="online-dot" />
+                        {activeThread.kind === "ai" ? "Mentor online" : "Online"}
+                      </span>
                       {activeThread.kind === "ai" && (
                         <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[11px] text-cyan-200">
                           AI Buddy Mode
@@ -4197,8 +4287,13 @@ export default function MelpinApp() {
                       })}
                       {aiLoadingThread === activeThread.id && (
                         <div className="flex justify-start">
-                          <div className="rounded-2xl bg-ink-3/80 px-3 py-2 text-xs text-soft animate-pulse">
-                            Melpin lagi ngetik...
+                          <div className="flex items-center rounded-2xl bg-ink-3/80 px-3 py-2 text-xs text-soft">
+                            <span className="mr-2">Melpin lagi ngetik</span>
+                            <span className="typing-dots" aria-hidden="true">
+                              <span />
+                              <span />
+                              <span />
+                            </span>
                           </div>
                         </div>
                       )}
@@ -4374,9 +4469,16 @@ export default function MelpinApp() {
                       />
                       <button
                         type="submit"
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-hot text-black transition-all duration-300 hover:scale-105"
+                        disabled={isChatSending}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full bg-hot text-black transition-all duration-300 hover:scale-105 ${
+                          isChatSending ? "opacity-70" : ""
+                        }`}
                       >
-                        <Send size={16} />
+                        {isChatSending ? (
+                          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                        ) : (
+                          <Send size={16} />
+                        )}
                       </button>
                     </form>
                   </>
@@ -4396,24 +4498,60 @@ export default function MelpinApp() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleAddNote()}
-                    className="flex items-center gap-2 rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105"
+                    disabled={isNoteCreating}
+                    className={`flex items-center gap-2 rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105 ${
+                      isNoteCreating ? "opacity-70" : ""
+                    }`}
                   >
-                    <Type size={16} />
-                    Note Baru
+                    {isNoteCreating ? (
+                      <>
+                        <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                        Membuat...
+                      </>
+                    ) : (
+                      <>
+                        <Type size={16} />
+                        Note Baru
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => handleAddNote("checklist")}
-                    className="flex items-center gap-2 rounded-full border border-hot/30 px-4 py-2 text-sm text-soft transition-all duration-300 hover:scale-105 hover:bg-ink-3"
+                    disabled={isNoteCreating}
+                    className={`flex items-center gap-2 rounded-full border border-hot/30 px-4 py-2 text-sm text-soft transition-all duration-300 hover:scale-105 hover:bg-ink-3 ${
+                      isNoteCreating ? "opacity-70" : ""
+                    }`}
                   >
-                    <ListChecks size={16} />
-                    Checklist
+                    {isNoteCreating ? (
+                      <>
+                        <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-hot/40 border-t-hot" />
+                        Membuat...
+                      </>
+                    ) : (
+                      <>
+                        <ListChecks size={16} />
+                        Checklist
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={handleCreateFromPrompt}
-                    className="flex items-center gap-2 rounded-full border border-hot/30 px-4 py-2 text-sm text-soft transition-all duration-300 hover:scale-105 hover:bg-ink-3"
+                    disabled={isNoteCreating}
+                    className={`flex items-center gap-2 rounded-full border border-hot/30 px-4 py-2 text-sm text-soft transition-all duration-300 hover:scale-105 hover:bg-ink-3 ${
+                      isNoteCreating ? "opacity-70" : ""
+                    }`}
                   >
-                    <Sparkles size={16} />
-                    Prompt Curhat
+                    {isNoteCreating ? (
+                      <>
+                        <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-hot/40 border-t-hot" />
+                        Membuat...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} />
+                        Prompt Curhat
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -4538,9 +4676,12 @@ export default function MelpinApp() {
                     </button>
                     <button
                       onClick={handleCreateFromPrompt}
-                      className="rounded-full bg-hot px-4 py-2 text-xs font-semibold text-black transition-all duration-300 hover:scale-105"
+                      disabled={isNoteCreating}
+                      className={`rounded-full bg-hot px-4 py-2 text-xs font-semibold text-black transition-all duration-300 hover:scale-105 ${
+                        isNoteCreating ? "opacity-70" : ""
+                      }`}
                     >
-                      Jadikan Note
+                      {isNoteCreating ? "Membuat..." : "Jadikan Note"}
                     </button>
                   </div>
                 </div>
@@ -4895,13 +5036,25 @@ export default function MelpinApp() {
                     </div>
                     <p className="mt-2 text-[11px] text-slate">Pilih tanggal & jam biar aku bisa ngingetin tepat waktu.</p>
                   </div>
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105"
-                  >
-                    <Plus size={16} />
-                    Tambah Reminder
-                  </button>
+                    <button
+                      type="submit"
+                      disabled={isReminderCreating}
+                      className={`flex items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105 ${
+                        isReminderCreating ? "cursor-not-allowed opacity-70" : ""
+                      }`}
+                    >
+                      {isReminderCreating ? (
+                        <span className="flex items-center gap-2 text-sm">
+                          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                          Menyimpan...
+                        </span>
+                      ) : (
+                        <>
+                          <Plus size={16} />
+                          Tambah Reminder
+                        </>
+                      )}
+                    </button>
                 </form>
                 <div className="mt-5 space-y-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-4 py-3 text-xs text-slate">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -5014,10 +5167,23 @@ export default function MelpinApp() {
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <SectionTitle icon={ImageIcon} title="Gallery" subtitle="Timeline memori, foto, dan cerita kecil." />
-                <label className="flex cursor-pointer items-center gap-2 rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105">
+                <label
+                  className={`flex cursor-pointer items-center gap-2 rounded-full bg-hot px-4 py-2 text-sm font-semibold text-black transition-all duration-300 hover:scale-105 ${
+                    isGalleryUploading ? "opacity-80" : ""
+                  }`}
+                >
                   <input type="file" accept="image/*" multiple onChange={handleGalleryUpload} className="hidden" />
-                  <Plus size={16} />
-                  Upload Foto
+                  {isGalleryUploading ? (
+                    <>
+                      <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Upload Foto
+                    </>
+                  )}
                 </label>
               </div>
 
