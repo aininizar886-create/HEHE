@@ -216,13 +216,26 @@ optgroup {
 }
 
 button,
-[role="button"] {
+[role="button"],
+a,
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+summary,
+[data-pressable="true"] {
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
   will-change: transform;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button:active,
-[role="button"]:active {
+[role="button"]:active,
+a:active,
+input[type="submit"]:active,
+input[type="button"]:active,
+input[type="reset"]:active,
+summary:active,
+[data-pressable="true"]:active {
   animation: button-pop 0.28s ease;
 }
 
