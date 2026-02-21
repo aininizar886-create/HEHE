@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { invalidateCache } from "@/lib/serverCache";
+import { uploadDataUrl } from "@/lib/storage";
 
 const parseStringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
@@ -28,10 +29,15 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ error: "Item tidak ditemukan." }, { status: 404 });
   }
 
+  const resolvedBlobUrl =
+    typeof payload.blobUrl === "string"
+      ? await uploadDataUrl(payload.blobUrl, `gallery/${user.id}`)
+      : undefined;
+
   const item = await prisma.galleryItem.update({
     where: { id: existing.id },
     data: {
-      blobUrl: typeof payload.blobUrl === "string" ? payload.blobUrl : undefined,
+      blobUrl: resolvedBlobUrl,
       name: typeof payload.name === "string" ? payload.name : undefined,
       caption: typeof payload.caption === "string" ? payload.caption : undefined,
       tags: Array.isArray(payload.tags) ? parseStringArray(payload.tags) : undefined,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
+import { uploadDataUrl } from "@/lib/storage";
 
 const parseStringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
@@ -54,10 +55,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "blobUrl wajib diisi." }, { status: 400 });
   }
 
+  const resolvedBlobUrl = await uploadDataUrl(blobUrl, `gallery/${user.id}`);
+
   const item = await prisma.galleryItem.create({
     data: {
       userId: user.id,
-      blobUrl,
+      blobUrl: resolvedBlobUrl,
       name: typeof payload.name === "string" ? payload.name : "Foto baru",
       caption: typeof payload.caption === "string" ? payload.caption : "",
       tags: parseStringArray(payload.tags),

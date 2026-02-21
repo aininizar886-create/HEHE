@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { getCached, invalidateCache, setCached } from "@/lib/serverCache";
+import { uploadDataUrl } from "@/lib/storage";
 
 const CACHE_TTL_MS = 2000;
 
@@ -42,14 +43,19 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Format request tidak valid." }, { status: 400 });
   }
 
+  const avatarImage =
+    typeof payload.avatarImage === "string" ? await uploadDataUrl(payload.avatarImage, `avatars/${user.id}`) : undefined;
+  const avatarAsset =
+    typeof payload.avatarAsset === "string" ? await uploadDataUrl(payload.avatarAsset, `avatars/${user.id}`) : undefined;
+
   const data = {
     name: typeof payload.name === "string" ? payload.name.trim() : undefined,
     birthDate: typeof payload.birthDate === "string" ? payload.birthDate : undefined,
     status: typeof payload.status === "string" ? payload.status.trim() : undefined,
     bio: typeof payload.bio === "string" ? payload.bio.trim() : undefined,
     avatar: typeof payload.avatar === "string" ? payload.avatar : undefined,
-    avatarImage: typeof payload.avatarImage === "string" ? payload.avatarImage : undefined,
-    avatarAsset: typeof payload.avatarAsset === "string" ? payload.avatarAsset : undefined,
+    avatarImage,
+    avatarAsset,
     accentColor: typeof payload.accentColor === "string" ? payload.accentColor : undefined,
     accentSoftness: typeof payload.accentSoftness === "number" ? payload.accentSoftness : undefined,
     terminalHost: typeof payload.terminalHost === "string" ? payload.terminalHost : undefined,
