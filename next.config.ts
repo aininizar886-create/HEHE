@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: "staticmap.openstreetmap.de",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "staticmap.openstreetmap.fr",
+        pathname: "/**",
+      },
     ],
   },
 };

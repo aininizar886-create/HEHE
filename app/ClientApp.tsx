@@ -677,9 +677,27 @@ const migrateGallery = (raw: unknown): GalleryItem[] => {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const getStaticMapUrl = (lat: number, lon: number) => {
+const buildStaticMapUrl = (lat: number, lon: number, host: string) => {
   const marker = encodeURIComponent(`${lat},${lon},red-pushpin`);
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=16&size=640x360&markers=${marker}`;
+  return `https://${host}/staticmap.php?center=${lat},${lon}&zoom=16&size=640x360&markers=${marker}`;
+};
+
+const getStaticMapUrl = (lat: number, lon: number) => buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.fr");
+const getStaticMapFallbackUrl = (lat: number, lon: number) =>
+  buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.de");
+
+const parseLatLon = (value: string) => {
+  const [latRaw, lonRaw] = value.split(",").map((item) => item.trim());
+  const lat = Number.parseFloat(latRaw);
+  const lon = Number.parseFloat(lonRaw);
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+  return { lat, lon };
+};
+
+const createMapFallbackSvg = (label: string) => {
+  const safeLabel = label.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"360\"><rect width=\"100%\" height=\"100%\" fill=\"#0f172a\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"#cbd5f5\" font-family=\"ui-sans-serif, system-ui\" font-size=\"18\">${safeLabel}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 
 const hexToRgb = (hex: string) => {
@@ -1034,6 +1052,22 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
                           loading="lazy"
                           referrerPolicy="no-referrer"
                           className="h-36 w-full object-cover"
+                          onError={(event) => {
+                            const target = event.currentTarget;
+                            const stage = target.dataset.fallbackStage ?? "0";
+                            if (stage === "0") {
+                              const coords = parseLatLon(share.body);
+                              if (coords) {
+                                target.dataset.fallbackStage = "1";
+                                target.src = getStaticMapFallbackUrl(coords.lat, coords.lon);
+                                return;
+                              }
+                            }
+                            if (stage !== "2") {
+                              target.dataset.fallbackStage = "2";
+                              target.src = createMapFallbackSvg("Preview lokasi gagal dimuat");
+                            }
+                          }}
                         />
                       ) : (
                         <Image

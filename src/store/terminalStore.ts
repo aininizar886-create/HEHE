@@ -124,9 +124,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       worker = null;
     }
     if (!worker) {
-      const workerUrl = new URL("../core/worker/osWorker.ts", import.meta.url);
-      workerUrl.searchParams.set("v", Date.now().toString());
-      worker = new Worker(workerUrl, { type: "module" });
+      worker = new Worker(new URL("../core/worker/osWorker.ts", import.meta.url), { type: "module" });
       worker.onmessage = (event: MessageEvent) => {
         const { type, payload } = event.data ?? {};
         if (type === "ready") {
