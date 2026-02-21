@@ -72,7 +72,7 @@ export async function GET() {
   }
 
   const cacheKey = `chats:${user.id}`;
-  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  const cached = await getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
   if (cached !== undefined) {
     return NextResponse.json(
       { threads: cached },
@@ -127,7 +127,7 @@ export async function GET() {
     })
   );
 
-  setCached(cacheKey, safeThreads);
+  await setCached(cacheKey, safeThreads, CACHE_TTL_MS);
   return NextResponse.json(
     { threads: safeThreads },
     { headers: { "Cache-Control": "private, max-age=2" } }
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
         },
         user.id
       );
-      invalidateCache(`chats:${user.id}`);
+      await invalidateCache(`chats:${user.id}`);
       return NextResponse.json({ thread: { ...existing, ...display } }, { status: 200 });
     }
   }
@@ -246,6 +246,6 @@ export async function POST(request: Request) {
     user.id
   );
 
-  invalidateCache(`chats:${user.id}`);
+  await invalidateCache(`chats:${user.id}`);
   return NextResponse.json({ thread: { ...thread, ...display } }, { status: 201 });
 }

@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   const cacheKey = `profile:${user.id}`;
-  const cached = getCached<Record<string, unknown> | null>(cacheKey, CACHE_TTL_MS);
+  const cached = await getCached<Record<string, unknown> | null>(cacheKey, CACHE_TTL_MS);
   if (cached !== undefined) {
     return NextResponse.json(
       { profile: cached },
@@ -22,7 +22,7 @@ export async function GET() {
   }
 
   const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
-  setCached(cacheKey, profile);
+  await setCached(cacheKey, profile, CACHE_TTL_MS);
   return NextResponse.json(
     { profile },
     { headers: { "Cache-Control": "private, max-age=2" } }
@@ -68,7 +68,7 @@ export async function PUT(request: Request) {
     update: data,
   });
 
-  invalidateCache(`profile:${user.id}`);
-  invalidateCache(`session:${user.id}`);
+  await invalidateCache(`profile:${user.id}`);
+  await invalidateCache(`session:${user.id}`);
   return NextResponse.json({ profile });
 }

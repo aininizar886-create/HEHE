@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   const cacheKey = `session:${user.id}`;
-  const cached = getCached<Record<string, unknown>>(cacheKey, CACHE_TTL_MS);
+  const cached = await getCached<Record<string, unknown>>(cacheKey, CACHE_TTL_MS);
   if (cached !== undefined) {
     return NextResponse.json({ user: cached }, { headers: { "Cache-Control": "private, max-age=2" } });
   }
@@ -25,7 +25,7 @@ export async function GET() {
     name: user.name,
     profile,
   };
-  setCached(cacheKey, payload);
+  await setCached(cacheKey, payload, CACHE_TTL_MS);
   return NextResponse.json(
     {
       user: payload,

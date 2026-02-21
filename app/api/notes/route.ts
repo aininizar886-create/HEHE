@@ -16,7 +16,7 @@ export async function GET() {
   }
 
   const cacheKey = `notes:${user.id}`;
-  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  const cached = await getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
   if (cached !== undefined) {
     return NextResponse.json(
       { notes: cached },
@@ -29,7 +29,7 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  setCached(cacheKey, notes);
+  await setCached(cacheKey, notes, CACHE_TTL_MS);
   return NextResponse.json(
     { notes },
     { headers: { "Cache-Control": "private, max-age=5" } }
@@ -74,6 +74,6 @@ export async function POST(request: Request) {
     },
   });
 
-  invalidateCache(`notes:${user.id}`);
+  await invalidateCache(`notes:${user.id}`);
   return NextResponse.json({ note }, { status: 201 });
 }

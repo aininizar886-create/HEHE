@@ -22,7 +22,7 @@ export async function GET() {
   }
 
   const cacheKey = `reminders:${user.id}`;
-  const cached = getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
+  const cached = await getCached<Record<string, unknown>[]>(cacheKey, CACHE_TTL_MS);
   if (cached !== undefined) {
     return NextResponse.json(
       { reminders: cached },
@@ -35,7 +35,7 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  setCached(cacheKey, reminders);
+  await setCached(cacheKey, reminders, CACHE_TTL_MS);
   return NextResponse.json(
     { reminders },
     { headers: { "Cache-Control": "private, max-age=5" } }
@@ -73,6 +73,6 @@ export async function POST(request: Request) {
     },
   });
 
-  invalidateCache(`reminders:${user.id}`);
+  await invalidateCache(`reminders:${user.id}`);
   return NextResponse.json({ reminder }, { status: 201 });
 }

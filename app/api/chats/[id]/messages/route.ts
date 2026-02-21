@@ -88,7 +88,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     },
   });
 
-  invalidateCache(`chats:${user.id}`);
+  await invalidateCache(`chats:${user.id}`);
   return NextResponse.json({ message }, { status: 201 });
 }
 
@@ -107,6 +107,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await prisma.chatMessage.deleteMany({ where: { threadId: thread.id } });
-  invalidateCache(`chats:${user.id}`);
+  await invalidateCache(`chats:${user.id}`);
   return NextResponse.json({ ok: true });
 }

@@ -40,7 +40,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     },
   });
 
-  invalidateCache(`gallery:${user.id}`);
+  await invalidateCache(`gallery:${user.id}`);
   return NextResponse.json({ item });
 }
 
@@ -59,6 +59,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await prisma.galleryItem.delete({ where: { id: existing.id } });
-  invalidateCache(`gallery:${user.id}`);
+  await invalidateCache(`gallery:${user.id}`);
   return NextResponse.json({ ok: true });
 }
