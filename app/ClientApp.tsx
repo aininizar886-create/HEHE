@@ -689,8 +689,12 @@ const buildStaticMapUrl = (lat: number, lon: number, host: string) => {
   return `https://${host}/staticmap.php?center=${lat},${lon}&zoom=16&size=640x360&markers=${marker}`;
 };
 
+const buildYandexStaticMapUrl = (lat: number, lon: number) =>
+  `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&size=640,360&z=15&l=map&pt=${lon},${lat},pm2rdm`;
+
 const getStaticMapUrl = (lat: number, lon: number) => buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.fr");
-const getStaticMapFallbackUrl = (lat: number, lon: number) =>
+const getStaticMapFallbackUrl = (lat: number, lon: number) => buildYandexStaticMapUrl(lat, lon);
+const getStaticMapLastFallbackUrl = (lat: number, lon: number) =>
   buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.de");
 
 const parseLatLon = (value: string) => {
@@ -1062,8 +1066,16 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
                                 return;
                               }
                             }
-                            if (stage !== "2") {
-                              target.dataset.fallbackStage = "2";
+                            if (stage === "1") {
+                              const coords = parseLatLon(share.body);
+                              if (coords) {
+                                target.dataset.fallbackStage = "2";
+                                target.src = getStaticMapLastFallbackUrl(coords.lat, coords.lon);
+                                return;
+                              }
+                            }
+                            if (stage !== "3") {
+                              target.dataset.fallbackStage = "3";
                               target.src = createMapFallbackSvg("Preview lokasi gagal dimuat");
                             }
                           }}
@@ -1225,6 +1237,7 @@ export default function MelpinApp() {
   });
   const notificationTimersRef = useRef<Map<string, number>>(new Map());
   const notificationClearRef = useRef<number | null>(null);
+  const notificationPromptedRef = useRef(false);
 
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(getInitialChatThreads);
   const [activeThreadId, setActiveThreadId] = useState(() => getInitialChatThreads()[0]?.id ?? null);
@@ -1921,18 +1934,22 @@ export default function MelpinApp() {
       showNotificationMessage("VAPID public key belum di-set.");
       return;
     }
-    const registration = await navigator.serviceWorker.register("/sw.js");
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+      await apiJson("/api/push/subscribe", {
+        method: "POST",
+        body: JSON.stringify(subscription.toJSON()),
       });
+    } catch {
+      showNotificationMessage("Gagal mengaktifkan push. Coba refresh lalu ulangi.");
     }
-    await apiJson("/api/push/subscribe", {
-      method: "POST",
-      body: JSON.stringify(subscription.toJSON()),
-    });
   }, [showNotificationMessage]);
 
   useEffect(() => {
@@ -1992,20 +2009,37 @@ export default function MelpinApp() {
       showNotificationMessage("Notifikasi diblokir. Aktifkan dulu di setting ya.");
       return "denied";
     }
-    const permission = await Notification.requestPermission();
-    setNotificationState(permission);
-    showNotificationMessage(permission === "granted" ? "Notifikasi aktif! Aku siap ngingetin." : "Notifikasi ditolak.");
-    if (permission === "granted") {
-      await ensurePushSubscription();
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationState(permission);
+      showNotificationMessage(permission === "granted" ? "Notifikasi aktif!" : "Notifikasi ditolak.");
+      if (permission === "granted") {
+        await ensurePushSubscription();
+      }
+      return permission;
+    } catch {
+      setNotificationState("denied");
+      showNotificationMessage("Gagal meminta izin notifikasi.");
+      return "denied";
     }
-    return permission;
   }, [ensurePushSubscription, showNotificationMessage]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (notificationState !== "default") return;
+    if (notificationPromptedRef.current) return;
+    notificationPromptedRef.current = true;
+    const timer = window.setTimeout(() => {
+      requestNotificationPermission().catch(() => undefined);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [isLoggedIn, notificationState, requestNotificationPermission]);
 
   useEffect(() => {
     if (!calendarToday) return;
     if (notificationState !== "default") return;
-    void requestNotificationPermission();
-  }, [calendarToday, notificationState, requestNotificationPermission]);
+    // Hindari auto-prompt tanpa gesture di mobile.
+  }, [calendarToday, notificationState]);
 
   const sendLocalNotification = useCallback((text: string) => {
     if (typeof window === "undefined") return;
