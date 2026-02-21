@@ -1317,6 +1317,7 @@ export default function MelpinApp() {
   const contactSearchAbortRef = useRef<AbortController | null>(null);
   const contactSearchCacheRef = useRef(new Map<string, { at: number; users: typeof contactResults }>());
   const contactSearchLastRef = useRef("");
+  const profileSyncRef = useRef(false);
 
   const [noteQuery, setNoteQuery] = useState("");
   const [noteFilter, setNoteFilter] = useState<"all" | "pinned" | "favorite" | "archived">("all");
@@ -2325,35 +2326,56 @@ export default function MelpinApp() {
   const handleSetupSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!setupName.trim()) return;
-    if (isProfileSaving) return;
+    if (isProfileSaving || profileSyncRef.current) return;
+    profileSyncRef.current = true;
     setIsProfileSaving(true);
+    const payload = {
+      name: setupName.trim(),
+      birthDate: setupBirth || "",
+      status: setupStatus.trim() || undefined,
+      bio: setupBio.trim() || undefined,
+      avatar: setupAvatar || undefined,
+      avatarImage: setupAvatarImage || undefined,
+      avatarAsset: setupAvatarAsset || undefined,
+      accentColor: setupAccentColor,
+      accentSoftness: setupAccentSoftness,
+      terminalHost: setupTerminalHost.trim() || undefined,
+      terminalName: setupTerminalName.trim() || undefined,
+      prayerCityId: setupPrayerCityId || undefined,
+      prayerCityName: setupPrayerCityName || undefined,
+      timezone: setupTimezone || undefined,
+    };
+    const optimisticProfile: Profile = {
+      name: payload.name,
+      birthDate: payload.birthDate,
+      status: payload.status,
+      bio: payload.bio,
+      avatar: payload.avatar,
+      avatarImage: payload.avatarImage,
+      avatarAsset: payload.avatarAsset,
+      accentColor: payload.accentColor,
+      accentSoftness: payload.accentSoftness,
+      terminalHost: payload.terminalHost,
+      terminalName: payload.terminalName,
+      prayerCityId: payload.prayerCityId,
+      prayerCityName: payload.prayerCityName,
+      timezone: payload.timezone,
+    };
+    setProfile(optimisticProfile);
+    setCurrentView("dashboard");
+    window.setTimeout(() => setIsProfileSaving(false), 700);
     apiJson<{ profile: Profile }>("/api/profile", {
       method: "PUT",
-      body: JSON.stringify({
-        name: setupName.trim(),
-        birthDate: setupBirth || undefined,
-        status: setupStatus.trim() || undefined,
-        bio: setupBio.trim() || undefined,
-        avatar: setupAvatar || undefined,
-        avatarImage: setupAvatarImage || undefined,
-        avatarAsset: setupAvatarAsset || undefined,
-        accentColor: setupAccentColor,
-        accentSoftness: setupAccentSoftness,
-        terminalHost: setupTerminalHost.trim() || undefined,
-        terminalName: setupTerminalName.trim() || undefined,
-        prayerCityId: setupPrayerCityId || undefined,
-        prayerCityName: setupPrayerCityName || undefined,
-        timezone: setupTimezone || undefined,
-      }),
+      body: JSON.stringify(payload),
     })
       .then((result) => {
         setProfile(result.profile);
-        setCurrentView("dashboard");
       })
       .catch(() => {
-        showNotificationMessage("Gagal menyimpan profil.");
+        showNotificationMessage("Gagal menyimpan profil ke server.");
       })
       .finally(() => {
+        profileSyncRef.current = false;
         setIsProfileSaving(false);
       });
   };
@@ -2387,35 +2409,56 @@ export default function MelpinApp() {
   const handleProfileSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!setupName.trim()) return;
-    if (isProfileSaving) return;
+    if (isProfileSaving || profileSyncRef.current) return;
+    profileSyncRef.current = true;
     setIsProfileSaving(true);
+    const payload = {
+      name: setupName.trim(),
+      birthDate: setupBirth || "",
+      status: setupStatus.trim() || undefined,
+      bio: setupBio.trim() || undefined,
+      avatar: setupAvatar || undefined,
+      avatarImage: setupAvatarImage || undefined,
+      avatarAsset: setupAvatarAsset || undefined,
+      accentColor: setupAccentColor,
+      accentSoftness: setupAccentSoftness,
+      terminalHost: setupTerminalHost.trim() || undefined,
+      terminalName: setupTerminalName.trim() || undefined,
+      prayerCityId: setupPrayerCityId || undefined,
+      prayerCityName: setupPrayerCityName || undefined,
+      timezone: setupTimezone || undefined,
+    };
+    const optimisticProfile: Profile = {
+      name: payload.name,
+      birthDate: payload.birthDate,
+      status: payload.status,
+      bio: payload.bio,
+      avatar: payload.avatar,
+      avatarImage: payload.avatarImage,
+      avatarAsset: payload.avatarAsset,
+      accentColor: payload.accentColor,
+      accentSoftness: payload.accentSoftness,
+      terminalHost: payload.terminalHost,
+      terminalName: payload.terminalName,
+      prayerCityId: payload.prayerCityId,
+      prayerCityName: payload.prayerCityName,
+      timezone: payload.timezone,
+    };
+    setProfile(optimisticProfile);
+    setIsEditingProfile(false);
+    window.setTimeout(() => setIsProfileSaving(false), 700);
     apiJson<{ profile: Profile }>("/api/profile", {
       method: "PUT",
-      body: JSON.stringify({
-        name: setupName.trim(),
-        birthDate: setupBirth || undefined,
-        status: setupStatus.trim() || undefined,
-        bio: setupBio.trim() || undefined,
-        avatar: setupAvatar || undefined,
-        avatarImage: setupAvatarImage || undefined,
-        avatarAsset: setupAvatarAsset || undefined,
-        accentColor: setupAccentColor,
-        accentSoftness: setupAccentSoftness,
-        terminalHost: setupTerminalHost.trim() || undefined,
-        terminalName: setupTerminalName.trim() || undefined,
-        prayerCityId: setupPrayerCityId || undefined,
-        prayerCityName: setupPrayerCityName || undefined,
-        timezone: setupTimezone || undefined,
-      }),
+      body: JSON.stringify(payload),
     })
       .then((result) => {
         setProfile(result.profile);
-        setIsEditingProfile(false);
       })
       .catch(() => {
-        showNotificationMessage("Gagal menyimpan profil.");
+        showNotificationMessage("Gagal menyimpan profil ke server.");
       })
       .finally(() => {
+        profileSyncRef.current = false;
         setIsProfileSaving(false);
       });
   };
