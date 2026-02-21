@@ -1291,6 +1291,9 @@ export default function MelpinApp() {
     Array<{ id: string; email: string; displayName: string; status?: string; avatar?: string }>
   >([]);
   const [contactLoading, setContactLoading] = useState(false);
+  const contactSearchAbortRef = useRef<AbortController | null>(null);
+  const contactSearchCacheRef = useRef(new Map<string, { at: number; users: typeof contactResults }>());
+  const contactSearchLastRef = useRef("");
 
   const [noteQuery, setNoteQuery] = useState("");
   const [noteFilter, setNoteFilter] = useState<"all" | "pinned" | "favorite" | "archived">("all");
@@ -2018,25 +2021,44 @@ export default function MelpinApp() {
 
   useEffect(() => {
     if (!isAddingContact) return;
-    const query = contactEmail.trim();
+    const query = contactEmail.trim().toLowerCase();
     if (query.length < 2) {
       setContactResults([]);
+      setContactLoading(false);
+      contactSearchLastRef.current = "";
+      return;
+    }
+    if (contactSearchLastRef.current === query) return;
+    contactSearchLastRef.current = query;
+    const cached = contactSearchCacheRef.current.get(query);
+    if (cached && Date.now() - cached.at < 2 * 60 * 1000) {
+      setContactResults(cached.users);
       setContactLoading(false);
       return;
     }
     setContactLoading(true);
     const timer = window.setTimeout(async () => {
-      try {
-        const response = await apiJson<{ users: Array<{ id: string; email: string; displayName: string; status?: string; avatar?: string }> }>(
-          `/api/users?search=${encodeURIComponent(query)}`
-        );
-        setContactResults(response.users ?? []);
-      } catch {
-        setContactResults([]);
-      } finally {
-        setContactLoading(false);
+      if (contactSearchAbortRef.current) {
+        contactSearchAbortRef.current.abort();
       }
-    }, 300);
+      const controller = new AbortController();
+      contactSearchAbortRef.current = controller;
+      try {
+        const response = await apiJson<{
+          users: Array<{ id: string; email: string; displayName: string; status?: string; avatar?: string }>;
+        }>(`/api/users?search=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const users = response.users ?? [];
+        setContactResults(users);
+        contactSearchCacheRef.current.set(query, { at: Date.now(), users });
+        if (contactSearchCacheRef.current.size > 40) {
+          contactSearchCacheRef.current.clear();
+        }
+      } catch {
+        if (!controller.signal.aborted) setContactResults([]);
+      } finally {
+        if (!controller.signal.aborted) setContactLoading(false);
+      }
+    }, 400);
     return () => window.clearTimeout(timer);
   }, [contactEmail, isAddingContact]);
 
