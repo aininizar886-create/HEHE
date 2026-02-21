@@ -511,7 +511,7 @@ const getCalendarGreeting = (now: Date, calendar?: CalendarToday | null) => {
     const maghribTime = parseLocalTime(dateKey, calendar.prayer?.maghrib);
     if (isWithinMinutesRange(nowMinutes, 3 * 60, 0, 90)) {
       return pickMessage(
-        ["Selamat sahur! Jangan lupa niatnya ya 🌙", "Sahur dulu yuk, biar puasanya kuat ✨"],
+        ["Semangat puasanya! Sahur dulu ya 🌙", "Semangat puasanya, sahur dulu biar kuat ✨"],
         seed
       );
     }
@@ -519,22 +519,25 @@ const getCalendarGreeting = (now: Date, calendar?: CalendarToday | null) => {
       const maghribMinutes = maghribTime.getHours() * 60 + maghribTime.getMinutes();
       if (isWithinMinutesRange(nowMinutes, maghribMinutes, 10, 25)) {
         return pickMessage(
-          ["Selamat berbuka puasa! Alhamdulillah 🤍", "Waktunya buka! Semoga puasanya lancar ✨"],
+          ["Semangat puasanya! Waktunya berbuka 🤍", "Semangat puasanya, waktunya buka ✨"],
           seed
         );
       }
     }
     if (isWithinMinutesRange(nowMinutes, 3 * 60 + 30, 10, 10)) {
-      return pickMessage(["Sahur reminder jam 03:30 ya ✨", "Sahur bentar lagi, semangat 💫"], seed);
+      return pickMessage(["Semangat puasanya! Sahur jam 03:30 ya ✨", "Semangat puasanya, sahur bentar lagi 💫"], seed);
     }
     if (isWithinMinutesRange(nowMinutes, 4 * 60 + 15, 10, 10)) {
-      return pickMessage(["Sahur terakhir jam 04:15 ya ✨", "Bentar lagi imsak, jangan lupa sahur 💛"], seed);
+      return pickMessage(
+        ["Semangat puasanya! Sahur terakhir jam 04:15 ya ✨", "Semangat puasanya, bentar lagi imsak 💛"],
+        seed
+      );
     }
     const day = calendar.ramadan.day ?? calendar.hijri?.day;
     return pickMessage(
       [
-        `Ramadan hari ke-${day ?? "?"}. Semangat ibadahnya ya 🌙`,
-        `Puasa hari ke-${day ?? "?"}. Semoga berkah dan lancar ✨`,
+        `Ramadan hari ke-${day ?? "?"}. Semangat puasanya ya 🌙`,
+        `Puasa hari ke-${day ?? "?"}. Semangat puasanya, lancar ya ✨`,
       ],
       seed
     );
@@ -2070,18 +2073,18 @@ export default function MelpinApp() {
         queueNotification(
           sahur0330,
           "sahur-0330",
-          `Selamat sahur! Imsak jam ${calendar.prayer?.imsak ?? "-"}.`
+          `Semangat puasanya! Sahur dulu ya, imsak jam ${calendar.prayer?.imsak ?? "-"}.`
         );
         queueNotification(
           sahur0415,
           "sahur-0415",
-          `Sahur terakhir ya! Imsak jam ${calendar.prayer?.imsak ?? "-"}.`
+          `Semangat puasanya! Sahur terakhir ya, imsak jam ${calendar.prayer?.imsak ?? "-"}.`
         );
         if (maghribTime) {
           queueNotification(
             maghribTime,
             "buka",
-            `Selamat berbuka puasa! Maghrib jam ${calendar.prayer?.maghrib ?? "-"}.`
+            `Semangat puasanya! Waktunya berbuka, maghrib jam ${calendar.prayer?.maghrib ?? "-"}.`
           );
         }
       }
