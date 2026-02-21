@@ -45,6 +45,9 @@ const fetchPrayerSchedule = async (cityId: string) => {
   };
 };
 
+const RAMADAN_START_DATE = process.env.RAMADAN_START_DATE;
+const RAMADAN_DAYS = Number(process.env.RAMADAN_DAYS ?? "30");
+
 const getHijriParts = (dateKey: string, timeZone: string) => {
   const baseDate = new Date(`${dateKey}T00:00:00+07:00`);
   if (Number.isNaN(baseDate.getTime())) return null;
@@ -67,6 +70,22 @@ const getHijriParts = (dateKey: string, timeZone: string) => {
   }).format(baseDate);
 
   return { day, month, monthName, year, era };
+};
+
+const toUtcDay = (dateKey: string) => {
+  const [year, month, day] = dateKey.split("-").map((item) => Number(item));
+  if (!year || !month || !day) return null;
+  return Date.UTC(year, month - 1, day);
+};
+
+const getGovernmentRamadanDay = (dateKey: string) => {
+  if (!RAMADAN_START_DATE) return null;
+  const start = toUtcDay(RAMADAN_START_DATE);
+  const current = toUtcDay(dateKey);
+  if (start === null || current === null) return null;
+  const diffDays = Math.floor((current - start) / (1000 * 60 * 60 * 24)) + 1;
+  if (diffDays < 1 || diffDays > RAMADAN_DAYS) return null;
+  return diffDays;
 };
 
 export async function GET(request: Request) {
@@ -104,14 +123,17 @@ export async function GET(request: Request) {
   const holiday = holidays.find((item) => item.date === dateKey) ?? null;
 
   const hijri = getHijriParts(dateKey, timeZone);
-  const isRamadan = hijri?.month === 9;
+  const governmentDay = getGovernmentRamadanDay(dateKey);
+  const isRamadan = typeof governmentDay === "number" ? true : hijri?.month === 9;
+  const ramadanDay = typeof governmentDay === "number" ? governmentDay : isRamadan ? hijri?.day : undefined;
+  const ramadanSource = typeof governmentDay === "number" ? "government" : "hijri";
 
   return NextResponse.json({
     date: dateKey,
     timezone: timeZone,
     holiday: holiday ? { name: holiday.name } : null,
     hijri,
-    ramadan: { isRamadan, day: isRamadan ? hijri?.day : undefined },
+    ramadan: { isRamadan, day: ramadanDay, source: ramadanSource },
     prayer: {
       cityId: prayerPayload.data.id,
       cityName: prayerPayload.data.kabko || preferredCityName,

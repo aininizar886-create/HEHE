@@ -75,8 +75,28 @@ const fetchPrayerSchedule = async (cityId: string) => {
   return { dateKey, times, cityName: payload.data.kabko || DEFAULT_CITY.name };
 };
 
+const RAMADAN_START_DATE = process.env.RAMADAN_START_DATE;
+const RAMADAN_DAYS = Number(process.env.RAMADAN_DAYS ?? "30");
+
+const toUtcDay = (dateKey: string) => {
+  const [year, month, day] = dateKey.split("-").map((part) => Number(part));
+  if (!year || !month || !day) return null;
+  return Date.UTC(year, month - 1, day);
+};
+
+const getGovernmentRamadanDay = (dateKey: string) => {
+  if (!RAMADAN_START_DATE) return null;
+  const start = toUtcDay(RAMADAN_START_DATE);
+  const current = toUtcDay(dateKey);
+  if (start === null || current === null) return null;
+  const diffDays = Math.floor((current - start) / (1000 * 60 * 60 * 24)) + 1;
+  if (diffDays < 1 || diffDays > RAMADAN_DAYS) return null;
+  return diffDays;
+};
+
 const isRamadanDate = (dateKey: string, timeZone: string) => {
-  const date = new Date(`${dateKey}T00:00:00+07:00`);
+  if (getGovernmentRamadanDay(dateKey) !== null) return true;
+  const date = new Date(`${dateKey}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
   const parts = new Intl.DateTimeFormat("id-ID-u-ca-islamic", {
     month: "numeric",
