@@ -413,9 +413,13 @@ const apiJson = async <T,>(path: string, options: RequestInit = {}): Promise<T> 
 };
 
 const getInitialChatThreads = () => {
-  const stored = readStorage<ChatThread[]>(STORAGE_KEYS.chats, DEFAULT_CHAT_THREADS);
-  const cleaned = stored.filter((thread) => thread.title.toLowerCase() !== "melfin asli");
-  return cleaned.length ? cleaned : DEFAULT_CHAT_THREADS;
+  const stored = readStorage<ChatThread[]>(STORAGE_KEYS.chats, []);
+  const cleaned = stored.filter(
+    (thread) =>
+      thread.title.toLowerCase() !== "melfin asli" &&
+      thread.id !== "melpin-ai"
+  );
+  return cleaned;
 };
 
 const makeDateKey = (date: Date) => {
@@ -1228,7 +1232,7 @@ export default function MelpinApp() {
   const notificationClearRef = useRef<number | null>(null);
 
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(getInitialChatThreads);
-  const [activeThreadId, setActiveThreadId] = useState(() => getInitialChatThreads()[0]?.id ?? "melpin-ai");
+  const [activeThreadId, setActiveThreadId] = useState(() => getInitialChatThreads()[0]?.id ?? null);
   const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
   const [chatSearch, setChatSearch] = useState("");
   const [aiLoadingThread, setAiLoadingThread] = useState<string | null>(null);
@@ -1331,7 +1335,7 @@ export default function MelpinApp() {
       })
     );
     setChatThreads(threadsWithMessages);
-    setActiveThreadId(threadsWithMessages[0]?.id ?? "melpin-ai");
+    setActiveThreadId(threadsWithMessages[0]?.id ?? null);
   }, [ensureDefaultThreads, sessionUserId]);
 
   const finalizeLogin = useCallback(async () => {
@@ -1573,7 +1577,8 @@ export default function MelpinApp() {
     const threadId = activeThreadIdRef.current;
     if (!threadId) return;
     const thread = chatThreadsRef.current.find((item) => item.id === threadId);
-    const lastTimestamp = thread?.messages[thread.messages.length - 1]?.timestamp;
+    if (!thread || threadId === "melpin-ai") return;
+    const lastTimestamp = thread.messages[thread.messages.length - 1]?.timestamp;
     const url = lastTimestamp
       ? `/api/chats/${threadId}/stream?after=${encodeURIComponent(String(lastTimestamp))}`
       : `/api/chats/${threadId}/stream`;
@@ -1627,7 +1632,7 @@ export default function MelpinApp() {
         return;
       }
       const thread = chatThreadsRef.current.find((item) => item.id === threadId);
-      if (!thread) {
+      if (!thread || threadId === "melpin-ai") {
         schedule();
         return;
       }
