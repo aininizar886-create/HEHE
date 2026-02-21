@@ -2,13 +2,13 @@ import "server-only";
 
 import nodemailer from "nodemailer";
 
-const smtpHost = process.env.SMTP_HOST ?? "";
-const smtpPort = Number(process.env.SMTP_PORT ?? "465");
-const smtpUser = process.env.SMTP_USER ?? "";
-const smtpPass = process.env.SMTP_PASS ?? "";
-const emailFrom = process.env.EMAIL_FROM ?? "";
-const mailWorkerUrl = process.env.MAIL_WORKER_URL ?? "";
-const mailWorkerToken = process.env.MAIL_WORKER_TOKEN ?? "";
+const smtpHost = (process.env.SMTP_HOST ?? "").trim();
+const smtpPort = Number((process.env.SMTP_PORT ?? "465").trim());
+const smtpUser = (process.env.SMTP_USER ?? "").trim();
+const smtpPass = (process.env.SMTP_PASS ?? "").trim();
+const emailFrom = (process.env.EMAIL_FROM ?? "").trim();
+const mailWorkerUrl = (process.env.MAIL_WORKER_URL ?? "").trim();
+const mailWorkerToken = (process.env.MAIL_WORKER_TOKEN ?? "").trim();
 const resolveFromAddress = () => {
   const candidate = emailFrom.trim();
   if (candidate && candidate.includes("@")) return candidate;
