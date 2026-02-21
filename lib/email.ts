@@ -200,3 +200,18 @@ export const sendNotificationEmail = async ({
     replyTo,
   });
 };
+
+export const sendPasswordResetEmail = async (email: string, token: string) => {
+  const baseUrl = getBaseUrl();
+  const resetUrl = `${baseUrl}/?reset=${token}`;
+  await sendNotificationEmail({
+    to: email,
+    subject: "Reset Password Melpin",
+    title: "Reset Password",
+    message:
+      "Kamu minta reset password. Klik tombol di bawah untuk atur password baru. Link berlaku 20 menit.",
+    ctaText: "Atur Password",
+    ctaUrl: resetUrl,
+    footerNote: `Kalau kamu tidak merasa minta reset, abaikan email ini. ${resetUrl}`,
+  });
+};

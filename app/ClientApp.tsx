@@ -1191,11 +1191,14 @@ export default function MelpinApp() {
     return storedLogin ? (storedProfile ? "dashboard" : "setup") : "login";
   });
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [authMode, setAuthMode] = useState<"login" | "register" | "magic">("login");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "magic" | "reset">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
   const [authStatus, setAuthStatus] = useState("");
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [setupName, setSetupName] = useState(() => readStorage<Profile | null>(STORAGE_KEYS.profile, null)?.name ?? "");
@@ -1560,6 +1563,16 @@ export default function MelpinApp() {
     };
     void exchange();
   }, [finalizeLogin]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("reset");
+    if (!token) return;
+    setResetToken(token);
+    setAuthMode("reset");
+    setAuthStatus("Masukkan password baru kamu.");
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
@@ -2392,6 +2405,37 @@ export default function MelpinApp() {
           body: JSON.stringify({ email }),
         });
         setAuthStatus("Magic link sudah dikirim ke email kamu.");
+        return;
+      }
+
+      if (authMode === "reset") {
+        if (resetToken) {
+          if (!resetPassword || resetPassword.length < 8) {
+            setAuthStatus("Password minimal 8 karakter.");
+            return;
+          }
+          if (resetPassword !== resetConfirm) {
+            setAuthStatus("Konfirmasi password belum sama.");
+            return;
+          }
+          await apiJson("/api/auth/reset", {
+            method: "POST",
+            body: JSON.stringify({ token: resetToken, password: resetPassword }),
+          });
+          setAuthStatus("Password berhasil diubah. Silakan login.");
+          setResetToken(null);
+          setResetPassword("");
+          setResetConfirm("");
+          setAuthMode("login");
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+
+        await apiJson("/api/auth/request-reset", {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        });
+        setAuthStatus("Link reset password sudah dikirim ke email kamu.");
         return;
       }
 
@@ -3477,7 +3521,7 @@ export default function MelpinApp() {
                 type="email"
                 className="w-full rounded-2xl border border-hot/30 bg-ink-3/80 px-4 py-3 text-sm text-white placeholder:text-slate focus:border-hot focus:outline-none"
               />
-              {authMode !== "magic" && (
+              {authMode !== "magic" && authMode !== "reset" && (
                 <input
                   value={authPassword}
                   onChange={(event) => setAuthPassword(event.target.value)}
@@ -3485,6 +3529,36 @@ export default function MelpinApp() {
                   type="password"
                   className="w-full rounded-2xl border border-hot/30 bg-ink-3/80 px-4 py-3 text-sm text-white placeholder:text-slate focus:border-hot focus:outline-none"
                 />
+              )}
+              {authMode === "reset" && resetToken && (
+                <>
+                  <input
+                    value={resetPassword}
+                    onChange={(event) => setResetPassword(event.target.value)}
+                    placeholder="Password baru (min 8)"
+                    type="password"
+                    className="w-full rounded-2xl border border-hot/30 bg-ink-3/80 px-4 py-3 text-sm text-white placeholder:text-slate focus:border-hot focus:outline-none"
+                  />
+                  <input
+                    value={resetConfirm}
+                    onChange={(event) => setResetConfirm(event.target.value)}
+                    placeholder="Ulangi password baru"
+                    type="password"
+                    className="w-full rounded-2xl border border-hot/30 bg-ink-3/80 px-4 py-3 text-sm text-white placeholder:text-slate focus:border-hot focus:outline-none"
+                  />
+                </>
+              )}
+              {authMode === "login" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("reset");
+                    setAuthStatus("");
+                  }}
+                  className="text-left text-xs text-soft underline-offset-4 transition hover:text-hot hover:underline"
+                >
+                  Lupa password?
+                </button>
               )}
               {authStatus && <p className="text-xs text-soft">{authStatus}</p>}
               {isBootstrapping && <p className="text-xs text-slate">Cek sesi dulu ya...</p>}
@@ -3504,7 +3578,15 @@ export default function MelpinApp() {
                 ) : (
                   <>
                     <LogIn size={18} />
-                    {authMode === "magic" ? "Kirim Magic Link" : authMode === "register" ? "Daftar" : "Masuk"}
+                    {authMode === "magic"
+                      ? "Kirim Magic Link"
+                      : authMode === "register"
+                      ? "Daftar"
+                      : authMode === "reset"
+                      ? resetToken
+                        ? "Ganti Password"
+                        : "Kirim Link Reset"
+                      : "Masuk"}
                   </>
                 )}
               </button>

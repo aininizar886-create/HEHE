@@ -10,6 +10,7 @@ import { prisma } from "./db";
 export const SESSION_COOKIE_NAME = "melpin_session";
 const SESSION_TTL_DAYS = 30;
 const MAGIC_LINK_TTL_MINUTES = 15;
+const PASSWORD_RESET_TTL_MINUTES = 20;
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -94,6 +95,20 @@ export const createMagicLinkToken = async (userId: string) => {
   return { token, expiresAt };
 };
 
+export const createPasswordResetToken = async (userId: string) => {
+  const token = randomBytes(24).toString("hex");
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000);
+  await prisma.passwordResetToken.create({
+    data: {
+      userId,
+      tokenHash,
+      expiresAt,
+    },
+  });
+  return { token, expiresAt };
+};
+
 export const consumeMagicLinkToken = async (token: string) => {
   const tokenHash = hashToken(token);
   const record = await prisma.magicLinkToken.findUnique({ where: { tokenHash } });
@@ -103,5 +118,17 @@ export const consumeMagicLinkToken = async (token: string) => {
     return null;
   }
   await prisma.magicLinkToken.delete({ where: { id: record.id } });
+  return record.userId;
+};
+
+export const consumePasswordResetToken = async (token: string) => {
+  const tokenHash = hashToken(token);
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  if (!record) return null;
+  if (record.expiresAt < new Date()) {
+    await prisma.passwordResetToken.delete({ where: { id: record.id } });
+    return null;
+  }
+  await prisma.passwordResetToken.delete({ where: { id: record.id } });
   return record.userId;
 };
