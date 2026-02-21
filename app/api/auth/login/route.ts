@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { createSession, setSessionCookie, verifyPassword } from "@/lib/auth";
+import { createSession, setSessionCookie } from "@/lib/auth";
+import { supabaseAnon } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   let payload: { email?: string; password?: string } = {};
@@ -18,15 +19,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email dan password wajib diisi." }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.passwordHash) {
+  const { data, error } = await supabaseAnon.auth.signInWithPassword({ email, password });
+  if (error || !data.user) {
     return NextResponse.json({ error: "Email atau password salah." }, { status: 401 });
   }
 
-  const isValid = await verifyPassword(password, user.passwordHash);
-  if (!isValid) {
-    return NextResponse.json({ error: "Email atau password salah." }, { status: 401 });
-  }
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: {},
+    create: { email },
+  });
 
   const { token, expiresAt } = await createSession(user.id);
   const response = NextResponse.json({

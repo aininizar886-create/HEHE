@@ -1540,6 +1540,28 @@ export default function MelpinApp() {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get("access_token");
+    if (!accessToken) return;
+    const exchange = async () => {
+      try {
+        await apiJson("/api/auth/exchange", {
+          method: "POST",
+          body: JSON.stringify({ accessToken }),
+        });
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        await finalizeLogin();
+      } catch {
+        setAuthStatus("Link magic kadaluarsa. Kirim ulang ya.");
+      }
+    };
+    void exchange();
+  }, [finalizeLogin]);
+
+  useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(id);
   }, []);

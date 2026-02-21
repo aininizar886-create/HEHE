@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/db";
-import { createMagicLinkToken } from "@/lib/auth";
-import { sendMagicLinkEmail } from "@/lib/email";
+import { supabaseAnon } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   let payload: { email?: string } = {};
@@ -17,23 +15,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email tidak valid." }, { status: 400 });
   }
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: { email },
+  const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/` : undefined;
+  const { error } = await supabaseAnon.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: redirectTo,
+    },
   });
-
-  try {
-    const { token } = await createMagicLinkToken(user.id);
-    await sendMagicLinkEmail(email, token);
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    console.error("Magic link email failed", error);
-    const debugEnabled = process.env.DEBUG_EMAIL === "true";
-    const message =
-      error instanceof Error && debugEnabled
-        ? error.message
-        : "Gagal mengirim email. Coba lagi ya.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message || "Gagal mengirim magic link." }, { status: 500 });
   }
+  return NextResponse.json({ ok: true });
 }

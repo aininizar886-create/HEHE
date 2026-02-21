@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { createSession, hashPassword, setSessionCookie } from "@/lib/auth";
+import { createSession, setSessionCookie } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 
 const MIN_PASSWORD_LEN = 8;
 
@@ -29,13 +30,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email sudah terdaftar." }, { status: 409 });
   }
 
-  const passwordHash = await hashPassword(password);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      name,
-    },
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name },
+  });
+  if (error || !data.user) {
+    return NextResponse.json({ error: error?.message ?? "Gagal membuat akun." }, { status: 400 });
+  }
+
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: { name: name || undefined },
+    create: { email, name },
   });
 
   const { token, expiresAt } = await createSession(user.id);
