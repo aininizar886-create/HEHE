@@ -685,18 +685,8 @@ const migrateGallery = (raw: unknown): GalleryItem[] => {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const buildStaticMapUrl = (lat: number, lon: number, host: string) => {
-  const marker = encodeURIComponent(`${lat},${lon},red-pushpin`);
-  return `https://${host}/staticmap.php?center=${lat},${lon}&zoom=16&size=640x360&markers=${marker}`;
-};
-
-const buildYandexStaticMapUrl = (lat: number, lon: number) =>
-  `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&size=640,360&z=15&l=map&pt=${lon},${lat},pm2rdm`;
-
-const getStaticMapUrl = (lat: number, lon: number) => buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.fr");
-const getStaticMapFallbackUrl = (lat: number, lon: number) => buildYandexStaticMapUrl(lat, lon);
-const getStaticMapLastFallbackUrl = (lat: number, lon: number) =>
-  buildStaticMapUrl(lat, lon, "staticmap.openstreetmap.de");
+const getStaticMapUrl = (lat: number, lon: number) =>
+  `/api/maps/static?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
 
 const parseLatLon = (value: string) => {
   const [latRaw, lonRaw] = value.split(",").map((item) => item.trim());
@@ -1060,23 +1050,7 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
                             const target = event.currentTarget;
                             const stage = target.dataset.fallbackStage ?? "0";
                             if (stage === "0") {
-                              const coords = parseLatLon(share.body);
-                              if (coords) {
-                                target.dataset.fallbackStage = "1";
-                                target.src = getStaticMapFallbackUrl(coords.lat, coords.lon);
-                                return;
-                              }
-                            }
-                            if (stage === "1") {
-                              const coords = parseLatLon(share.body);
-                              if (coords) {
-                                target.dataset.fallbackStage = "2";
-                                target.src = getStaticMapLastFallbackUrl(coords.lat, coords.lon);
-                                return;
-                              }
-                            }
-                            if (stage !== "3") {
-                              target.dataset.fallbackStage = "3";
+                              target.dataset.fallbackStage = "1";
                               target.src = createMapFallbackSvg("Preview lokasi gagal dimuat");
                             }
                           }}
