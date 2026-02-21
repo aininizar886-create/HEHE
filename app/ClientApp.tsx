@@ -1191,6 +1191,7 @@ export default function MelpinApp() {
   const [calendarError, setCalendarError] = useState("");
   const calendarTimersRef = useRef<number[]>([]);
   const [prayerCities, setPrayerCities] = useState<PrayerCity[]>([]);
+  const [isPrayerCityDetecting, setIsPrayerCityDetecting] = useState(false);
 
   const [notes, setNotes] = useState<Note[]>(() => migrateNotes(readStorage(STORAGE_KEYS.notes, [])));
   const [reminders, setReminders] = useState<Reminder[]>(() => readStorage(STORAGE_KEYS.reminders, []));
@@ -1880,8 +1881,11 @@ export default function MelpinApp() {
 
   const handleDetectPrayerCity = useCallback(async () => {
     if (typeof window === "undefined") return;
+    if (isPrayerCityDetecting) return;
+    setIsPrayerCityDetecting(true);
     if (!navigator.geolocation) {
       showNotificationMessage("Browser belum support lokasi.");
+      setIsPrayerCityDetecting(false);
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -1899,13 +1903,16 @@ export default function MelpinApp() {
           );
         } catch {
           showNotificationMessage("Gagal deteksi lokasi. Pilih manual ya.");
+        } finally {
+          setIsPrayerCityDetecting(false);
         }
       },
       () => {
         showNotificationMessage("Izin lokasi ditolak.");
+        setIsPrayerCityDetecting(false);
       }
     );
-  }, [showNotificationMessage]);
+  }, [isPrayerCityDetecting, showNotificationMessage]);
 
 
   const ensurePushSubscription = useCallback(async () => {
@@ -3266,7 +3273,14 @@ export default function MelpinApp() {
                   <div className="flex flex-wrap gap-2">
                     <label className="cursor-pointer rounded-full border border-hot/30 px-3 py-2 text-xs text-soft transition-all hover:bg-ink-3">
                       <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                      {isAvatarUploading ? "Uploading..." : "Upload Foto"}
+                      {isAvatarUploading ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 animate-spin rounded-full border border-hot/40 border-t-hot" />
+                          Uploading...
+                        </span>
+                      ) : (
+                        "Upload Foto"
+                      )}
                     </label>
                     {(setupAvatarImage || setupAvatarAsset) && (
                       <button
@@ -3477,9 +3491,19 @@ export default function MelpinApp() {
                   <button
                     type="button"
                     onClick={handleDetectPrayerCity}
-                    className="rounded-full border border-hot/30 px-3 py-1 text-[11px] text-soft transition-all hover:bg-ink-3"
+                    disabled={isPrayerCityDetecting}
+                    className={`rounded-full border border-hot/30 px-3 py-1 text-[11px] text-soft transition-all hover:bg-ink-3 ${
+                      isPrayerCityDetecting ? "opacity-70" : ""
+                    }`}
                   >
-                    Auto-detect
+                    {isPrayerCityDetecting ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-3 w-3 animate-spin rounded-full border border-hot/40 border-t-hot" />
+                        Mendeteksi...
+                      </span>
+                    ) : (
+                      "Auto-detect"
+                    )}
                   </button>
                 </div>
               </div>
@@ -3653,7 +3677,14 @@ export default function MelpinApp() {
                             }`}
                           >
                             <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                            {isAvatarUploading ? "Uploading..." : "Upload Foto"}
+                            {isAvatarUploading ? (
+                              <span className="inline-flex items-center gap-2">
+                                <span className="h-3 w-3 animate-spin rounded-full border border-hot/40 border-t-hot" />
+                                Uploading...
+                              </span>
+                            ) : (
+                              "Upload Foto"
+                            )}
                           </label>
                           {(setupAvatarImage || setupAvatarAsset) && (
                             <button
@@ -3857,9 +3888,19 @@ export default function MelpinApp() {
                         <button
                           type="button"
                           onClick={handleDetectPrayerCity}
-                          className="rounded-full border border-hot/30 px-3 py-1 text-[11px] text-soft transition-all hover:bg-ink-3"
+                          disabled={isPrayerCityDetecting}
+                          className={`rounded-full border border-hot/30 px-3 py-1 text-[11px] text-soft transition-all hover:bg-ink-3 ${
+                            isPrayerCityDetecting ? "opacity-70" : ""
+                          }`}
                         >
-                          Auto-detect
+                          {isPrayerCityDetecting ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-3 w-3 animate-spin rounded-full border border-hot/40 border-t-hot" />
+                              Mendeteksi...
+                            </span>
+                          ) : (
+                            "Auto-detect"
+                          )}
                         </button>
                       </div>
                     </div>
