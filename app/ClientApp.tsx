@@ -1789,7 +1789,7 @@ export default function MelpinApp() {
 
     const channel = supabase.channel(`chat:${threadId}`);
     chatRealtimeRef.current = channel;
-    setRealtimeActive(true);
+    setRealtimeActive(false);
 
     channel.on(
       "postgres_changes",
@@ -1801,7 +1801,15 @@ export default function MelpinApp() {
       }
     );
 
-    channel.subscribe();
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setRealtimeActive(true);
+        return;
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setRealtimeActive(false);
+      }
+    });
 
     return () => {
       setRealtimeActive(false);
