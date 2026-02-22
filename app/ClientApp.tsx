@@ -103,7 +103,7 @@ type ChatMessage = {
   from: "me" | "melfin" | "assistant";
   text: string;
   timestamp: number;
-  status?: "sent" | "read";
+  status?: "sending" | "sent" | "failed" | "read";
   kind?: "text" | "share";
   share?: SharePayload;
   shareCaption?: string;
@@ -1030,13 +1030,25 @@ type ChatBubbleProps = {
   isMine: boolean;
   tone: string;
   avatar?: string;
+  status?: ChatMessage["status"];
   share?: SharePayload;
   shareCaption?: string;
   senderLabel?: string;
   onShareClick?: (share: SharePayload) => void;
 };
 
-const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, senderLabel, onShareClick }: ChatBubbleProps) => {
+const ChatBubble = ({
+  text,
+  time,
+  isMine,
+  tone,
+  avatar,
+  status,
+  share,
+  shareCaption,
+  senderLabel,
+  onShareClick,
+}: ChatBubbleProps) => {
   const isCompactShare = share && (share.kind === "note" || share.kind === "reminder");
   const isLocationShare = share?.kind === "location";
   const mapLink = isLocationShare && share?.meta ? share.meta : null;
@@ -1175,7 +1187,17 @@ const ChatBubble = ({ text, time, isMine, tone, avatar, share, shareCaption, sen
           }`}
         >
           <span>{time}</span>
-          {isMine && <span>✓✓</span>}
+          {isMine && (
+            <span>
+              {status === "sending"
+                ? "..."
+                : status === "failed"
+                ? "!"
+                : status === "read"
+                ? "✓✓"
+                : "✓"}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -1310,6 +1332,7 @@ export default function MelpinApp() {
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [onlineMap, setOnlineMap] = useState<Record<string, boolean>>({});
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
+  const [threadPresence, setThreadPresence] = useState<Record<string, boolean>>({});
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -1321,9 +1344,11 @@ export default function MelpinApp() {
   const [realtimeActive, setRealtimeActive] = useState(false);
   const profileRealtimeRef = useRef<RealtimeChannel | null>(null);
   const presenceRealtimeRef = useRef<RealtimeChannel | null>(null);
+  const threadPresenceRef = useRef<RealtimeChannel | null>(null);
   const [presenceActive, setPresenceActive] = useState(false);
   const typingTimeoutsRef = useRef<Map<string, number>>(new Map());
   const typingLastSentRef = useRef<Map<string, number>>(new Map());
+  const readReceiptLastSentRef = useRef<Map<string, number>>(new Map());
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactStatus, setContactStatus] = useState("");
@@ -1830,6 +1855,26 @@ export default function MelpinApp() {
     [sessionUserId]
   );
 
+  const emitReadReceipt = useCallback(
+    (threadId: string, lastTimestamp: number) => {
+      const channel = chatRealtimeRef.current;
+      if (!channel) return;
+      if (activeThreadIdRef.current !== threadId) return;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      if (!userId) return;
+      const lastMap = readReceiptLastSentRef.current;
+      const last = lastMap.get(threadId) ?? 0;
+      if (lastTimestamp <= last) return;
+      lastMap.set(threadId, lastTimestamp);
+      channel.send({
+        type: "broadcast",
+        event: "read",
+        payload: { userId, threadId, lastTimestamp },
+      });
+    },
+    [sessionUserId]
+  );
+
   useEffect(() => {
     if (!presenceActive || !presenceRealtimeRef.current) return;
     updateOnlineMapFromPresence(presenceRealtimeRef.current.presenceState() as Record<string, unknown>);
@@ -1902,6 +1947,17 @@ export default function MelpinApp() {
   }, [activeThreadId, chatThreads, aiLoadingThread]);
 
   useEffect(() => {
+    if (!isLoggedIn) return;
+    const threadId = activeThreadIdRef.current;
+    if (!threadId) return;
+    const thread = chatThreadsRef.current.find((item) => item.id === threadId);
+    if (!thread || thread.kind !== "realtime") return;
+    const last = thread.messages[thread.messages.length - 1];
+    if (!last || last.from === "me") return;
+    emitReadReceipt(thread.id, last.timestamp);
+  }, [chatThreads, emitReadReceipt, isLoggedIn]);
+
+  useEffect(() => {
     if (currentView === "chat-hub") {
       setStreamEnabled(true);
     }
@@ -1949,6 +2005,16 @@ export default function MelpinApp() {
         setThreadTyping(threadId, false);
       }
     });
+    channel.on("broadcast", { event: "read" }, (payload) => {
+      const data = payload?.payload as
+        | { userId?: string; threadId?: string; lastTimestamp?: number }
+        | undefined;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      if (!data?.userId || data.userId === userId) return;
+      if (data.threadId !== threadId) return;
+      if (typeof data.lastTimestamp !== "number") return;
+      markThreadMessagesRead(threadId, data.lastTimestamp);
+    });
     channel.on("broadcast", { event: "message" }, (payload) => {
       const incomingRaw = (payload?.payload as { message?: Record<string, unknown> } | undefined)
         ?.message;
@@ -1981,6 +2047,68 @@ export default function MelpinApp() {
       }
     };
   }, [activeThreadId, currentView, isLoggedIn, scheduleTypingClear, sessionUserId, setThreadTyping]);
+
+  useEffect(() => {
+    if (!isLoggedIn || currentView !== "chat-hub") return;
+    const threadId = activeThreadIdRef.current;
+    if (!threadId || threadId === "melpin-ai") {
+      setThreadPresence({});
+      if (threadPresenceRef.current) {
+        threadPresenceRef.current.unsubscribe();
+        threadPresenceRef.current = null;
+      }
+      return;
+    }
+    const thread = chatThreadsRef.current.find((item) => item.id === threadId);
+    if (!thread || thread.kind !== "realtime") {
+      setThreadPresence({});
+      return;
+    }
+    const supabase = getSupabaseBrowser();
+    if (!supabase || !sessionUserId) return;
+
+    if (threadPresenceRef.current) {
+      threadPresenceRef.current.unsubscribe();
+      threadPresenceRef.current = null;
+    }
+
+    const channel = supabase.channel(`presence:thread:${threadId}`, {
+      config: { presence: { key: sessionUserId } },
+    });
+    threadPresenceRef.current = channel;
+
+    const syncPresence = () => {
+      const next: Record<string, boolean> = {};
+      const state = channel.presenceState() as Record<string, Array<{ user_id?: string }>>;
+      Object.values(state).forEach((items) => {
+        items.forEach((item) => {
+          if (item.user_id) next[item.user_id] = true;
+        });
+      });
+      setThreadPresence(next);
+    };
+
+    channel.on("presence", { event: "sync" }, syncPresence);
+    channel.on("presence", { event: "join" }, syncPresence);
+    channel.on("presence", { event: "leave" }, syncPresence);
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({ user_id: sessionUserId, thread_id: threadId, online_at: new Date().toISOString() });
+        syncPresence();
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setThreadPresence({});
+      }
+    });
+
+    return () => {
+      channel.unsubscribe();
+      if (threadPresenceRef.current === channel) {
+        threadPresenceRef.current = null;
+      }
+    };
+  }, [activeThreadId, currentView, isLoggedIn, sessionUserId]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -2546,7 +2674,7 @@ export default function MelpinApp() {
       } finally {
         if (!controller.signal.aborted) setContactLoading(false);
       }
-    }, 400);
+    }, 200);
     return () => window.clearTimeout(timer);
   }, [contactEmail, isAddingContact]);
 
@@ -3027,10 +3155,20 @@ export default function MelpinApp() {
     });
   };
 
+  const setChatMessageStatus = (threadId: string, messageId: string, status: ChatMessage["status"]) => {
+    updateChatThread(threadId, (thread) => {
+      const next = thread.messages.map((message) =>
+        message.id === messageId ? { ...message, status } : message
+      );
+      return { ...thread, messages: next };
+    });
+  };
+
   const persistChatMessage = async (threadId: string, message: ChatMessage) => {
     const response = await apiJson<{ message: Record<string, unknown> }>(`/api/chats/${threadId}/messages`, {
       method: "POST",
       body: JSON.stringify({
+        id: message.id,
         text: message.text,
         from: message.from,
         kind: message.kind,
@@ -3073,6 +3211,23 @@ export default function MelpinApp() {
         });
         nextMessages.sort((a, b) => a.timestamp - b.timestamp);
         return { ...thread, messages: nextMessages };
+      })
+    );
+  };
+
+  const markThreadMessagesRead = (threadId: string, lastTimestamp: number) => {
+    setChatThreads((prev) =>
+      prev.map((thread) => {
+        if (thread.id !== threadId) return thread;
+        let changed = false;
+        const nextMessages = thread.messages.map((message) => {
+          if (message.from !== "me") return message;
+          if (message.timestamp > lastTimestamp) return message;
+          if (message.status === "read" || message.status === "failed") return message;
+          changed = true;
+          return { ...message, status: "read" };
+        });
+        return changed ? { ...thread, messages: nextMessages } : thread;
       })
     );
   };
@@ -3131,7 +3286,7 @@ export default function MelpinApp() {
       from: "me",
       text: formatShareMessage(payload),
       timestamp: Date.now(),
-      status: "sent",
+      status: "sending",
       kind: "share",
       share: payload,
       shareCaption: caption.trim(),
@@ -3149,6 +3304,7 @@ export default function MelpinApp() {
       const saved = await persistChatMessage(threadId, message);
       replaceChatMessage(threadId, message.id, saved);
     } catch {
+      setChatMessageStatus(threadId, message.id, "failed");
       showNotificationMessage("Gagal mengirim attachment.");
     }
   };
@@ -3172,7 +3328,7 @@ export default function MelpinApp() {
       from: "me",
       text: trimmed,
       timestamp: Date.now(),
-      status: "sent",
+      status: "sending",
     };
 
     updateChatThread(thread.id, (current) => ({
@@ -3189,7 +3345,10 @@ export default function MelpinApp() {
     const spinnerTimeout = window.setTimeout(() => setIsChatSending(false), 700);
     persistChatMessage(thread.id, userMessage)
       .then((saved) => replaceChatMessage(thread.id, userMessage.id, saved))
-      .catch(() => showNotificationMessage("Gagal mengirim chat."))
+      .catch(() => {
+        setChatMessageStatus(thread.id, userMessage.id, "failed");
+        showNotificationMessage("Gagal mengirim chat.");
+      })
       .finally(() => {
         window.clearTimeout(spinnerTimeout);
         setIsChatSending(false);
@@ -3603,9 +3762,11 @@ export default function MelpinApp() {
   const activeOnline = useMemo(() => {
     if (!activeThread) return false;
     if (activeThread.kind === "ai") return true;
-    if (activeThread.contactId) return Boolean(onlineMap[activeThread.contactId]);
+    if (activeThread.contactId) {
+      return Boolean(threadPresence[activeThread.contactId] ?? onlineMap[activeThread.contactId]);
+    }
     return false;
-  }, [activeThread, onlineMap]);
+  }, [activeThread, onlineMap, threadPresence]);
   const activeTyping = useMemo(() => {
     if (!activeThread || activeThread.kind !== "realtime") return false;
     return Boolean(typingMap[activeThread.id]);
@@ -5099,6 +5260,7 @@ export default function MelpinApp() {
                             }
                             text={message.text}
                             time={formatChatTime(message.timestamp)}
+                            status={message.status}
                             senderLabel={senderLabel}
                             avatar={
                               message.from === "me"

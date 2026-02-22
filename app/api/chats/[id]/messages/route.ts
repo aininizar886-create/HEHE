@@ -73,10 +73,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!text.trim()) {
     return NextResponse.json({ error: "Pesan kosong." }, { status: 400 });
   }
+  const clientId = typeof payload.id === "string" ? payload.id : undefined;
 
   const isAssistant = payload.from === "assistant" && thread.kind === "ai";
   const message = await prisma.chatMessage.create({
     data: {
+      ...(clientId ? { id: clientId } : {}),
       threadId: thread.id,
       from: isAssistant ? "assistant" : "me",
       senderId: isAssistant ? null : user.id,
