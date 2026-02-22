@@ -1795,6 +1795,33 @@ export default function MelpinApp() {
     [sessionUserId]
   );
 
+  const emitChatBroadcast = useCallback(
+    (threadId: string, message: ChatMessage) => {
+      const channel = chatRealtimeRef.current;
+      if (!channel) return;
+      if (activeThreadIdRef.current !== threadId) return;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      if (!userId) return;
+      channel.send({
+        type: "broadcast",
+        event: "message",
+        payload: {
+          message: {
+            id: message.id,
+            senderId: userId,
+            from: message.from,
+            text: message.text,
+            kind: message.kind ?? "text",
+            share: message.share,
+            shareCaption: message.shareCaption,
+            timestamp: new Date(message.timestamp).toISOString(),
+          },
+        },
+      });
+    },
+    [sessionUserId]
+  );
+
   useEffect(() => {
     if (!presenceActive || !presenceRealtimeRef.current) return;
     updateOnlineMapFromPresence(presenceRealtimeRef.current.presenceState() as Record<string, unknown>);
@@ -1913,6 +1940,14 @@ export default function MelpinApp() {
       } else {
         setThreadTyping(threadId, false);
       }
+    });
+    channel.on("broadcast", { event: "message" }, (payload) => {
+      const incomingRaw = (payload?.payload as { message?: Record<string, unknown> } | undefined)
+        ?.message;
+      if (!incomingRaw) return;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      const mapped = mapChatMessage(incomingRaw, userId);
+      mergeIncomingMessages(threadId, [mapped]);
     });
 
     channel.subscribe((status) => {
@@ -3059,6 +3094,7 @@ export default function MelpinApp() {
       messages: [...thread.messages, message],
     }));
     if (thread?.kind === "realtime") {
+      emitChatBroadcast(threadId, message);
       emitTyping(threadId, false);
     }
     try {
@@ -3097,6 +3133,7 @@ export default function MelpinApp() {
     }));
     handleChatDraftChange(thread.id, "");
     if (thread.kind === "realtime") {
+      emitChatBroadcast(thread.id, userMessage);
       emitTyping(thread.id, false);
     }
 
