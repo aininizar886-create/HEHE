@@ -10,6 +10,7 @@ import {
   Calendar,
   Clock,
   Copy,
+  ChevronLeft,
   Heart,
   Home as HomeIcon,
   Image as ImageIcon,
@@ -1498,6 +1499,7 @@ export default function MelpinApp() {
   const [focusedReminderId, setFocusedReminderId] = useState<string | null>(null);
   const [isChatAttachOpen, setIsChatAttachOpen] = useState(false);
   const [sharePicker, setSharePicker] = useState<"note" | "reminder" | "gallery" | null>(null);
+  const [mobileChatView, setMobileChatView] = useState<"list" | "chat">("list");
   const chatMediaInputRef = useRef<HTMLInputElement | null>(null);
   const chatAutoScrollRef = useRef(true);
 
@@ -2049,6 +2051,12 @@ export default function MelpinApp() {
     }, 15000);
     return () => window.clearInterval(metaTimer);
   }, [isLoggedIn, refreshThreadMeta]);
+
+  useEffect(() => {
+    if (currentView === "chat-hub") {
+      setMobileChatView("list");
+    }
+  }, [currentView]);
 
   useEffect(() => {
     chatAutoScrollRef.current = true;
@@ -5257,8 +5265,12 @@ export default function MelpinApp() {
           )}
 
           {currentView === "chat-hub" && (
-            <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
-              <div className="glass min-w-0 rounded-[32px] p-5 sm:p-6">
+            <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] lg:gap-6">
+              <div
+                className={`glass min-w-0 rounded-[28px] p-4 sm:rounded-[32px] sm:p-6 ${
+                  mobileChatView === "list" ? "block" : "hidden"
+                } lg:block`}
+              >
                 <SectionTitle icon={MessageCircle} title="Chat Hub" subtitle="Satu halaman, banyak chat berbeda." />
                 <div className="mt-5 flex items-center gap-2 rounded-2xl border border-hot/20 bg-ink-3/70 px-3 py-2">
                   <Search size={16} className="text-hot" />
@@ -5345,7 +5357,10 @@ export default function MelpinApp() {
                         key={thread.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setActiveThreadId(thread.id)}
+                        onClick={() => {
+                          setActiveThreadId(thread.id);
+                          setMobileChatView("chat");
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
@@ -5422,10 +5437,22 @@ export default function MelpinApp() {
                 </div>
               </div>
 
-              <div className="glass flex min-w-0 h-[70vh] max-h-[74vh] flex-col overflow-hidden rounded-[32px] p-4 sm:h-[74vh] sm:max-h-[78vh] sm:p-6 lg:h-[76vh] lg:max-h-[82vh]">
+              <div
+                className={`glass flex min-w-0 h-[70vh] max-h-[74vh] flex-col overflow-hidden rounded-[28px] p-4 sm:h-[74vh] sm:max-h-[78vh] sm:rounded-[32px] sm:p-6 lg:h-[76vh] lg:max-h-[82vh] ${
+                  mobileChatView === "chat" ? "flex" : "hidden"
+                } lg:flex`}
+              >
                 {activeThread ? (
                   <>
                     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-3 py-2 sm:px-4 sm:py-3">
+                      <button
+                        type="button"
+                        onClick={() => setMobileChatView("list")}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hot/25 bg-ink-2/80 text-soft lg:hidden"
+                        aria-label="Kembali ke daftar chat"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
                       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl sm:h-12 sm:w-12 sm:text-2xl">
                         {isAvatarImage(activeThread.avatar) ? (
                           <Image
