@@ -107,6 +107,10 @@ type ChatMessage = {
   kind?: "text" | "share";
   share?: SharePayload;
   shareCaption?: string;
+  replyToId?: string;
+  reactions?: Record<string, string[]>;
+  editedAt?: number;
+  deletedAt?: number;
 };
 
 type ChatThread = {
@@ -840,6 +844,18 @@ const parseSharePayload = (value: unknown): SharePayload | undefined => {
   };
 };
 
+const parseReactions = (value: unknown): Record<string, string[]> | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const entries = Object.entries(value as Record<string, unknown>);
+  const cleaned: Record<string, string[]> = {};
+  entries.forEach(([emoji, users]) => {
+    if (!Array.isArray(users)) return;
+    const ids = users.filter((id) => typeof id === "string") as string[];
+    if (ids.length) cleaned[emoji] = ids;
+  });
+  return Object.keys(cleaned).length ? cleaned : undefined;
+};
+
 const mapChatMessage = (message: Record<string, unknown>, currentUserId?: string | null): ChatMessage => {
   const senderId = typeof message.senderId === "string" ? message.senderId : null;
   const from =
@@ -853,15 +869,24 @@ const mapChatMessage = (message: Record<string, unknown>, currentUserId?: string
       ? "melfin"
       : "me";
   const share = parseSharePayload(message.share);
+  const deletedAtRaw = message.deletedAt ? new Date(String(message.deletedAt)).getTime() : undefined;
   return {
     id: typeof message.id === "string" ? message.id : makeId(),
     from,
-    text: typeof message.text === "string" ? message.text : "",
+    text: deletedAtRaw
+      ? "Pesan dihapus"
+      : typeof message.text === "string"
+      ? message.text
+      : "",
     timestamp: message.timestamp ? new Date(String(message.timestamp)).getTime() : Date.now(),
     status: "sent",
-    kind: message.kind === "share" ? "share" : "text",
-    share,
+    kind: deletedAtRaw ? "text" : message.kind === "share" ? "share" : "text",
+    share: deletedAtRaw ? undefined : share,
     shareCaption: typeof message.shareCaption === "string" ? message.shareCaption : undefined,
+    replyToId: typeof message.replyToId === "string" ? message.replyToId : undefined,
+    reactions: parseReactions(message.reactions),
+    editedAt: message.editedAt ? new Date(String(message.editedAt)).getTime() : undefined,
+    deletedAt: deletedAtRaw,
   };
 };
 
@@ -1033,6 +1058,14 @@ type ChatBubbleProps = {
   status?: ChatMessage["status"];
   share?: SharePayload;
   shareCaption?: string;
+  replyPreview?: { label: string; text: string } | null;
+  reactions?: Record<string, string[]>;
+  currentUserId?: string | null;
+  editedAt?: number;
+  onReact?: (emoji: string) => void;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   senderLabel?: string;
   onShareClick?: (share: SharePayload) => void;
 };
@@ -1046,6 +1079,14 @@ const ChatBubble = ({
   status,
   share,
   shareCaption,
+  replyPreview,
+  reactions,
+  currentUserId,
+  editedAt,
+  onReact,
+  onReply,
+  onEdit,
+  onDelete,
   senderLabel,
   onShareClick,
 }: ChatBubbleProps) => {
@@ -1054,8 +1095,11 @@ const ChatBubble = ({
   const mapLink = isLocationShare && share?.meta ? share.meta : null;
   const compactLabel =
     share?.kind === "note" ? "Buka di Notes" : share?.kind === "reminder" ? "Buka di Reminders" : "Buka detail";
+  const reactionEntries = reactions ? Object.entries(reactions) : [];
+  const reactionEmojis = ["❤️", "😂", "👍", "😮", "😢"];
+  const isEdited = Boolean(editedAt);
   return (
-    <div className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+    <div className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
       {!isMine && avatar && (
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-lg">
           {isAvatarImage(avatar) ? (
@@ -1075,8 +1119,16 @@ const ChatBubble = ({
       <div
         className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-[0_0_16px_rgba(0,0,0,0.25)] ${
           isMine ? "rounded-br-md" : "rounded-bl-md"
-      } ${tone}`}
+        } ${tone}`}
       >
+        {replyPreview && (
+          <div className={`mb-2 rounded-xl px-3 py-2 text-[11px] ${
+            isMine ? "bg-black/10 text-black/70" : "bg-white/5 text-soft/70"
+          }`}>
+            <p className="font-semibold">{replyPreview.label}</p>
+            <p className="truncate">{replyPreview.text}</p>
+          </div>
+        )}
         {share ? (
           <div
             role={isLocationShare ? undefined : "button"}
@@ -1187,16 +1239,65 @@ const ChatBubble = ({
           }`}
         >
           <span>{time}</span>
-          {isMine && (
-            <span>
-              {status === "sending"
-                ? "..."
-                : status === "failed"
-                ? "!"
-                : status === "read"
-                ? "✓✓"
-                : "✓"}
-            </span>
+          {status === "sending" && <span>...</span>}
+          {status === "failed" && <span>!</span>}
+          {isMine && status !== "sending" && status !== "failed" && (
+            <span>{status === "read" ? "✓✓" : "✓"}</span>
+          )}
+          {isEdited && (
+            <span className="uppercase tracking-[0.12em] opacity-60">edited</span>
+          )}
+        </div>
+      </div>
+      <div className={`flex flex-col gap-2 ${isMine ? "items-end" : "items-start"}`}>
+        {reactionEntries.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {reactionEntries.map(([emoji, users]) => {
+              const active = currentUserId ? users.includes(currentUserId) : false;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => onReact?.(emoji)}
+                  className={`rounded-full px-2 py-1 text-[11px] ${
+                    active ? "bg-hot/80 text-black" : "bg-ink-2/80 text-soft"
+                  }`}
+                >
+                  {emoji} {users.length}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2 text-[11px] opacity-100 md:opacity-0 md:group-hover:opacity-100">
+          {onReply && (
+            <button type="button" onClick={onReply} className="rounded-full bg-ink-2/70 px-2 py-1 text-soft">
+              Balas
+            </button>
+          )}
+          {onEdit && (
+            <button type="button" onClick={onEdit} className="rounded-full bg-ink-2/70 px-2 py-1 text-soft">
+              Edit
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" onClick={onDelete} className="rounded-full bg-ink-2/70 px-2 py-1 text-soft">
+              Hapus
+            </button>
+          )}
+          {onReact && (
+            <div className="flex items-center gap-1">
+              {reactionEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => onReact(emoji)}
+                  className="rounded-full bg-ink-2/70 px-2 py-1"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -1333,6 +1434,8 @@ export default function MelpinApp() {
   const [onlineMap, setOnlineMap] = useState<Record<string, boolean>>({});
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [threadPresence, setThreadPresence] = useState<Record<string, boolean>>({});
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -1844,6 +1947,7 @@ export default function MelpinApp() {
             senderId: userId,
             from: message.from,
             text: message.text,
+            replyToId: message.replyToId,
             kind: message.kind ?? "text",
             share: message.share,
             shareCaption: message.shareCaption,
@@ -1988,6 +2092,15 @@ export default function MelpinApp() {
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "ChatMessage", filter: `threadId=eq.${threadId}` },
+      (payload) => {
+        const userId = sessionUserIdRef.current ?? sessionUserId;
+        const incoming = payload?.new ? [mapChatMessage(payload.new, userId)] : [];
+        mergeIncomingMessages(threadId, incoming);
+      }
+    );
+    channel.on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "ChatMessage", filter: `threadId=eq.${threadId}` },
       (payload) => {
         const userId = sessionUserIdRef.current ?? sessionUserId;
         const incoming = payload?.new ? [mapChatMessage(payload.new, userId)] : [];
@@ -2179,6 +2292,17 @@ export default function MelpinApp() {
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "ChatMessage", filter },
+      (payload) => {
+        const threadId = typeof payload.new?.threadId === "string" ? payload.new.threadId : null;
+        if (!threadId) return;
+        const userId = sessionUserIdRef.current ?? sessionUserId;
+        const mapped = mapChatMessage(payload.new as Record<string, unknown>, userId);
+        mergeIncomingMessages(threadId, [mapped]);
+      }
+    );
+    channel.on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "ChatMessage", filter },
       (payload) => {
         const threadId = typeof payload.new?.threadId === "string" ? payload.new.threadId : null;
         if (!threadId) return;
@@ -3164,6 +3288,19 @@ export default function MelpinApp() {
     });
   };
 
+  const updateChatMessage = (
+    threadId: string,
+    messageId: string,
+    updater: (message: ChatMessage) => ChatMessage
+  ) => {
+    updateChatThread(threadId, (thread) => {
+      const next = thread.messages.map((message) =>
+        message.id === messageId ? updater(message) : message
+      );
+      return { ...thread, messages: next };
+    });
+  };
+
   const persistChatMessage = async (threadId: string, message: ChatMessage) => {
     const response = await apiJson<{ message: Record<string, unknown> }>(`/api/chats/${threadId}/messages`, {
       method: "POST",
@@ -3174,8 +3311,22 @@ export default function MelpinApp() {
         kind: message.kind,
         share: message.share,
         shareCaption: message.shareCaption,
+        replyToId: message.replyToId,
         timestamp: new Date(message.timestamp).toISOString(),
       }),
+    });
+    return mapChatMessage(response.message, sessionUserIdRef.current ?? sessionUserId);
+  };
+
+  const patchChatMessage = async (
+    threadId: string,
+    messageId: string,
+    action: "edit" | "delete" | "react",
+    payload: Record<string, unknown>
+  ) => {
+    const response = await apiJson<{ message: Record<string, unknown> }>(`/api/chats/${threadId}/messages`, {
+      method: "PATCH",
+      body: JSON.stringify({ messageId, action, ...payload }),
     });
     return mapChatMessage(response.message, sessionUserIdRef.current ?? sessionUserId);
   };
@@ -3202,11 +3353,15 @@ export default function MelpinApp() {
     setChatThreads((prev) =>
       prev.map((thread) => {
         if (thread.id !== threadId) return thread;
-        const existingIds = new Set(thread.messages.map((message) => message.id));
         const nextMessages = [...thread.messages];
+        const indexMap = new Map(nextMessages.map((message, index) => [message.id, index]));
         incoming.forEach((message) => {
-          if (!existingIds.has(message.id)) {
+          const existingIndex = indexMap.get(message.id);
+          if (existingIndex === undefined) {
             nextMessages.push(message);
+            indexMap.set(message.id, nextMessages.length - 1);
+          } else {
+            nextMessages[existingIndex] = { ...nextMessages[existingIndex], ...message };
           }
         });
         nextMessages.sort((a, b) => a.timestamp - b.timestamp);
@@ -3290,12 +3445,14 @@ export default function MelpinApp() {
       kind: "share",
       share: payload,
       shareCaption: caption.trim(),
+      replyToId: replyTarget?.id,
     };
     const thread = chatThreadsRef.current.find((item) => item.id === threadId);
     updateChatThread(threadId, (thread) => ({
       ...thread,
       messages: [...thread.messages, message],
     }));
+    setReplyTarget(null);
     if (thread?.kind === "realtime") {
       emitChatBroadcast(threadId, message);
       emitTyping(threadId, false);
@@ -3323,12 +3480,33 @@ export default function MelpinApp() {
     const trimmed = draft.trim();
     if (!trimmed) return;
 
+    if (editingMessageId) {
+      const messageId = editingMessageId;
+      setEditingMessageId(null);
+      setReplyTarget(null);
+      handleChatDraftChange(thread.id, "");
+      updateChatMessage(thread.id, messageId, (message) => ({
+        ...message,
+        text: trimmed,
+        editedAt: Date.now(),
+        deletedAt: undefined,
+      }));
+      try {
+        const updated = await patchChatMessage(thread.id, messageId, "edit", { text: trimmed });
+        replaceChatMessage(thread.id, messageId, updated);
+      } catch {
+        showNotificationMessage("Gagal mengedit pesan.");
+      }
+      return;
+    }
+
     const userMessage: ChatMessage = {
       id: makeId(),
       from: "me",
       text: trimmed,
       timestamp: Date.now(),
       status: "sending",
+      replyToId: replyTarget?.id,
     };
 
     updateChatThread(thread.id, (current) => ({
@@ -3336,6 +3514,7 @@ export default function MelpinApp() {
       messages: [...current.messages, userMessage],
     }));
     handleChatDraftChange(thread.id, "");
+    setReplyTarget(null);
     if (thread.kind === "realtime") {
       emitChatBroadcast(thread.id, userMessage);
       emitTyping(thread.id, false);
@@ -3395,6 +3574,56 @@ export default function MelpinApp() {
       return response.text || "Hmm... aku bingung jawabnya.";
     } catch {
       return "Koneksi ke AI gagal. Coba lagi ya.";
+    }
+  };
+
+  const handleMessageReply = (message: ChatMessage) => {
+    setReplyTarget(message);
+  };
+
+  const handleMessageEdit = (threadId: string, message: ChatMessage) => {
+    if (message.deletedAt) return;
+    setEditingMessageId(message.id);
+    handleChatDraftChange(threadId, message.text);
+  };
+
+  const handleMessageDelete = async (threadId: string, message: ChatMessage) => {
+    if (message.deletedAt) return;
+    updateChatMessage(threadId, message.id, (current) => ({
+      ...current,
+      text: "Pesan dihapus",
+      deletedAt: Date.now(),
+      editedAt: undefined,
+      share: undefined,
+      shareCaption: undefined,
+      kind: "text",
+    }));
+    try {
+      const updated = await patchChatMessage(threadId, message.id, "delete", {});
+      replaceChatMessage(threadId, message.id, updated);
+    } catch {
+      showNotificationMessage("Gagal menghapus pesan.");
+    }
+  };
+
+  const handleMessageReact = async (threadId: string, message: ChatMessage, emoji: string) => {
+    const userId = sessionUserIdRef.current ?? sessionUserId;
+    if (!userId) return;
+    const reactions = { ...(message.reactions ?? {}) };
+    const existing = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
+    const has = existing.includes(userId);
+    const next = has ? existing.filter((id) => id !== userId) : [...existing, userId];
+    if (next.length) {
+      reactions[emoji] = next;
+    } else {
+      delete reactions[emoji];
+    }
+    updateChatMessage(threadId, message.id, (current) => ({ ...current, reactions }));
+    try {
+      const updated = await patchChatMessage(threadId, message.id, "react", { emoji });
+      replaceChatMessage(threadId, message.id, updated);
+    } catch {
+      showNotificationMessage("Gagal memberi reaksi.");
     }
   };
 
@@ -5247,6 +5476,22 @@ export default function MelpinApp() {
                             : message.from === "assistant"
                             ? "Melpin Assistant"
                             : activeThread.title;
+                        const replyTargetMessage = message.replyToId
+                          ? activeThread.messages.find((item) => item.id === message.replyToId)
+                          : null;
+                        const replyPreview = replyTargetMessage
+                          ? {
+                              label:
+                                replyTargetMessage.from === "me"
+                                  ? profile?.name || "Kamu"
+                                  : replyTargetMessage.from === "assistant"
+                                  ? "Melpin Assistant"
+                                  : activeThread.title,
+                              text: replyTargetMessage.deletedAt
+                                ? "Pesan dihapus"
+                                : replyTargetMessage.text,
+                            }
+                          : null;
                         return (
                           <ChatBubble
                             key={item.key}
@@ -5261,6 +5506,10 @@ export default function MelpinApp() {
                             text={message.text}
                             time={formatChatTime(message.timestamp)}
                             status={message.status}
+                            editedAt={message.editedAt}
+                            replyPreview={replyPreview}
+                            reactions={message.reactions}
+                            currentUserId={sessionUserId}
                             senderLabel={senderLabel}
                             avatar={
                               message.from === "me"
@@ -5272,6 +5521,26 @@ export default function MelpinApp() {
                             share={message.share}
                             shareCaption={message.shareCaption}
                             onShareClick={handleOpenSharedItem}
+                            onReply={
+                              message.from !== "assistant"
+                                ? () => handleMessageReply(message)
+                                : undefined
+                            }
+                            onEdit={
+                              message.from === "me"
+                                ? () => handleMessageEdit(activeThread.id, message)
+                                : undefined
+                            }
+                            onDelete={
+                              message.from === "me"
+                                ? () => handleMessageDelete(activeThread.id, message)
+                                : undefined
+                            }
+                            onReact={
+                              message.from !== "assistant"
+                                ? (emoji) => handleMessageReact(activeThread.id, message, emoji)
+                                : undefined
+                            }
                           />
                         );
                       })}
@@ -5439,6 +5708,31 @@ export default function MelpinApp() {
                             )}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {(replyTarget || editingMessageId) && (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-hot/20 bg-ink-2/70 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-slate">
+                            {editingMessageId ? "Edit pesan" : "Balas pesan"}
+                          </p>
+                          <p className="truncate text-sm text-soft">
+                            {editingMessageId
+                              ? activeDraft
+                              : replyTarget?.text || "Pesan dihapus"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyTarget(null);
+                            setEditingMessageId(null);
+                          }}
+                          className="rounded-full bg-ink-3/80 px-3 py-1 text-[11px] text-soft"
+                        >
+                          Batal
+                        </button>
                       </div>
                     )}
 

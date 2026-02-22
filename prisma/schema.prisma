@@ -182,10 +182,15 @@ model ChatMessage {
   from         ChatSender
   senderId     String?
   text         String
+  replyToId    String?
   kind         ChatMessageKind @default(text)
   share        Json?
   shareCaption String?
+  reactions    Json?
   timestamp    DateTime        @default(now())
+  editedAt     DateTime?
+  deletedAt    DateTime?
+  updatedAt    DateTime        @updatedAt
 
   thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sender User?      @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
