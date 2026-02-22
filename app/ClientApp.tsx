@@ -1317,6 +1317,7 @@ export default function MelpinApp() {
   const chatStreamRef = useRef<EventSource | null>(null);
   const [streamEnabled, setStreamEnabled] = useState(true);
   const chatRealtimeRef = useRef<RealtimeChannel | null>(null);
+  const chatListRealtimeRef = useRef<RealtimeChannel | null>(null);
   const [realtimeActive, setRealtimeActive] = useState(false);
   const profileRealtimeRef = useRef<RealtimeChannel | null>(null);
   const presenceRealtimeRef = useRef<RealtimeChannel | null>(null);
@@ -1334,6 +1335,13 @@ export default function MelpinApp() {
   const contactSearchCacheRef = useRef(new Map<string, { at: number; users: typeof contactResults }>());
   const contactSearchLastRef = useRef("");
   const profileSyncRef = useRef(false);
+  const chatListKey = useMemo(() => {
+    const ids = chatThreads
+      .map((thread) => thread.id)
+      .filter((id) => id && id !== "melpin-ai")
+      .sort((a, b) => a.localeCompare(b));
+    return ids.join(",");
+  }, [chatThreads]);
 
   const [noteQuery, setNoteQuery] = useState("");
   const [noteFilter, setNoteFilter] = useState<"all" | "pinned" | "favorite" | "archived">("all");
@@ -2021,6 +2029,45 @@ export default function MelpinApp() {
       }
     };
   }, [getContactIds, isLoggedIn, updateContactDisplay]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+    if (!chatListKey) return;
+    const listKey = chatListKey;
+    const threadIds = listKey.split(",").filter(Boolean);
+    if (!threadIds.length) return;
+
+    if (chatListRealtimeRef.current) {
+      chatListRealtimeRef.current.unsubscribe();
+      chatListRealtimeRef.current = null;
+    }
+
+    const channel = supabase.channel(`chat-list:${listKey}`);
+    chatListRealtimeRef.current = channel;
+    const filter = `threadId=in.(${listKey})`;
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "ChatMessage", filter },
+      (payload) => {
+        const threadId = typeof payload.new?.threadId === "string" ? payload.new.threadId : null;
+        if (!threadId) return;
+        const userId = sessionUserIdRef.current ?? sessionUserId;
+        const mapped = mapChatMessage(payload.new as Record<string, unknown>, userId);
+        mergeIncomingMessages(threadId, [mapped]);
+      }
+    );
+    channel.subscribe();
+
+    return () => {
+      channel.unsubscribe();
+      if (chatListRealtimeRef.current === channel) {
+        chatListRealtimeRef.current = null;
+      }
+    };
+  }, [chatListKey, isLoggedIn, sessionUserId]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -3007,13 +3054,8 @@ export default function MelpinApp() {
     setChatDrafts((prev) => ({ ...prev, [threadId]: value }));
     const thread = chatThreadsRef.current.find((item) => item.id === threadId);
     if (thread?.kind === "realtime") {
-      const trimmed = value.trim();
-      const shouldType = trimmed.length > 0;
-      setThreadTyping(threadId, shouldType);
+      const shouldType = value.trim().length > 0;
       emitTyping(threadId, shouldType);
-      if (shouldType) {
-        scheduleTypingClear(threadId);
-      }
     }
   };
 
