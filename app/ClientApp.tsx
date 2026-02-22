@@ -1600,11 +1600,11 @@ export default function MelpinApp() {
     setSessionUserId(session.user.id);
     sessionUserIdRef.current = session.user.id;
     setProfile(session.user.profile ?? null);
-    if (!session.user.profile) {
-      setCurrentView("setup");
-    } else {
-      setCurrentView("dashboard");
-    }
+    setCurrentView((prev) => {
+      if (!session.user?.profile) return "setup";
+      if (prev === "login" || prev === "setup") return "dashboard";
+      return prev;
+    });
     void syncServerData(session.user.id).catch(() => {});
   }, [syncServerData]);
 
@@ -1784,11 +1784,11 @@ export default function MelpinApp() {
         setSessionUserId(session.user.id);
         sessionUserIdRef.current = session.user.id;
         setProfile(session.user.profile ?? null);
-        if (!session.user.profile) {
-          setCurrentView("setup");
-        } else {
-          setCurrentView("dashboard");
-        }
+        setCurrentView((prev) => {
+          if (!session.user?.profile) return "setup";
+          if (prev === "login" || prev === "setup") return "dashboard";
+          return prev;
+        });
         await syncServerData(session.user.id);
       } catch {
         if (!cancelled) {
@@ -5240,7 +5240,7 @@ export default function MelpinApp() {
           )}
 
           {currentView === "chat-hub" && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+            <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
               <div className="glass min-w-0 rounded-[32px] p-5 sm:p-6">
                 <SectionTitle icon={MessageCircle} title="Chat Hub" subtitle="Satu halaman, banyak chat berbeda." />
                 <div className="mt-5 flex items-center gap-2 rounded-2xl border border-hot/20 bg-ink-3/70 px-3 py-2">
@@ -5319,7 +5319,7 @@ export default function MelpinApp() {
                     </div>
                   </form>
                 )}
-                <div className="mt-5 max-h-[65vh] space-y-2 overflow-y-auto pr-1 scrollbar-hide">
+                <div className="mt-5 max-h-[40vh] space-y-2 overflow-y-auto pr-1 scrollbar-hide sm:max-h-[50vh] lg:max-h-[65vh]">
                   {filteredChatThreads.map((thread) => {
                     const isActive = thread.id === activeThread?.id;
                     const last = thread.messages[thread.messages.length - 1];
@@ -5405,7 +5405,7 @@ export default function MelpinApp() {
                 </div>
               </div>
 
-              <div className="glass flex min-w-0 min-h-0 h-[76vh] max-h-[82vh] flex-col overflow-hidden rounded-[32px] p-4 sm:h-[80vh] sm:max-h-[85vh] sm:p-6">
+              <div className="glass flex min-w-0 h-[70vh] max-h-[74vh] flex-col overflow-hidden rounded-[32px] p-4 sm:h-[74vh] sm:max-h-[78vh] sm:p-6 lg:h-[76vh] lg:max-h-[82vh]">
                 {activeThread ? (
                   <>
                     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-4 py-3">
@@ -5454,7 +5454,7 @@ export default function MelpinApp() {
 
                     <div
                       ref={chatRef}
-                      className="chat-wall mt-4 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-hot/15 bg-black/40 p-4 text-sm scrollbar-hide"
+                      className="chat-wall mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-hot/15 bg-black/40 p-4 text-sm scrollbar-hide"
                     >
                       {activeThread.messages.length === 0 && (
                         <p className="text-center text-xs text-slate">Belum ada chat. Ketik dulu ya.</p>
