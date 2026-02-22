@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { invalidateCache } from "@/lib/serverCache";
@@ -161,7 +163,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       where: { id: message.id },
       data: {
         text: "",
-        share: null,
+        share: Prisma.DbNull,
         shareCaption: null,
         deletedAt: new Date(),
         editedAt: null,
