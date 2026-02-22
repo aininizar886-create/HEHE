@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
@@ -33,6 +34,7 @@ import {
   User,
 } from "lucide-react";
 import { TerminalExperience } from "@/src/ui/components/Terminal/TerminalExperience";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 type View = "login" | "setup" | "dashboard" | "terminal" | "chat-hub" | "notes" | "reminders" | "gallery";
 
@@ -1313,6 +1315,8 @@ export default function MelpinApp() {
   const chatPollInFlightRef = useRef(false);
   const chatStreamRef = useRef<EventSource | null>(null);
   const [streamEnabled, setStreamEnabled] = useState(true);
+  const chatRealtimeRef = useRef<RealtimeChannel | null>(null);
+  const [realtimeActive, setRealtimeActive] = useState(false);
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactStatus, setContactStatus] = useState("");
@@ -1767,8 +1771,51 @@ export default function MelpinApp() {
 
   useEffect(() => {
     if (!isLoggedIn || currentView !== "chat-hub") return;
+    const threadId = activeThreadIdRef.current;
+    if (!threadId || threadId === "melpin-ai") {
+      setRealtimeActive(false);
+      return;
+    }
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setRealtimeActive(false);
+      return;
+    }
+
+    if (chatStreamRef.current) {
+      chatStreamRef.current.close();
+      chatStreamRef.current = null;
+    }
+
+    const channel = supabase.channel(`chat:${threadId}`);
+    chatRealtimeRef.current = channel;
+    setRealtimeActive(true);
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "ChatMessage", filter: `threadId=eq.${threadId}` },
+      (payload) => {
+        const userId = sessionUserIdRef.current ?? sessionUserId;
+        const incoming = payload?.new ? [mapChatMessage(payload.new, userId)] : [];
+        mergeIncomingMessages(threadId, incoming);
+      }
+    );
+
+    channel.subscribe();
+
+    return () => {
+      setRealtimeActive(false);
+      channel.unsubscribe();
+      if (chatRealtimeRef.current === channel) {
+        chatRealtimeRef.current = null;
+      }
+    };
+  }, [activeThreadId, currentView, isLoggedIn, sessionUserId]);
+
+  useEffect(() => {
+    if (!isLoggedIn || currentView !== "chat-hub") return;
     if (typeof window === "undefined" || !("EventSource" in window)) return;
-    if (!streamEnabled) return;
+    if (!streamEnabled || realtimeActive) return;
     const threadId = activeThreadIdRef.current;
     if (!threadId) return;
     const thread = chatThreadsRef.current.find((item) => item.id === threadId);
@@ -1801,10 +1848,11 @@ export default function MelpinApp() {
       stream.close();
       chatStreamRef.current = null;
     };
-  }, [activeThreadId, currentView, isLoggedIn, sessionUserId, streamEnabled]);
+  }, [activeThreadId, currentView, isLoggedIn, realtimeActive, sessionUserId, streamEnabled]);
 
   useEffect(() => {
     if (!isLoggedIn || currentView !== "chat-hub") return;
+    if (realtimeActive) return;
     if (typeof window !== "undefined" && "EventSource" in window && streamEnabled) return;
     let cancelled = false;
     let delay = 2000;
@@ -2667,10 +2715,14 @@ export default function MelpinApp() {
   };
 
   const replaceChatMessage = (threadId: string, tempId: string, message: ChatMessage) => {
-    updateChatThread(threadId, (thread) => ({
-      ...thread,
-      messages: thread.messages.map((item) => (item.id === tempId ? message : item)),
-    }));
+    updateChatThread(threadId, (thread) => {
+      const filtered = thread.messages.filter(
+        (item) => item.id !== tempId && item.id !== message.id
+      );
+      const next = [...filtered, message];
+      next.sort((a, b) => a.timestamp - b.timestamp);
+      return { ...thread, messages: next };
+    });
   };
 
   const persistChatMessage = async (threadId: string, message: ChatMessage) => {
