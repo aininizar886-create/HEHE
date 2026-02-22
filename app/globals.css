@@ -318,6 +318,11 @@ button[data-anim="magic"]:active,
   animation: button-sparkle 0.38s ease;
 }
 
+button[data-anim="save"]:active,
+[role="button"][data-anim="save"]:active {
+  animation: button-bloom 0.4s ease;
+}
+
 button[class*="bg-hot"]:active,
 [role="button"][class*="bg-hot"]:active {
   animation: button-sparkle 0.38s ease;
@@ -349,6 +354,21 @@ button[class*="border"]:active,
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes button-bloom {
+  0% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 rgba(255, 79, 163, 0);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 18px rgba(255, 79, 163, 0.45);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 79, 163, 0);
   }
 }
 

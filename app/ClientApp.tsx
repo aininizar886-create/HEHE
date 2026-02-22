@@ -3895,8 +3895,9 @@ export default function MelpinApp() {
               <button
                 type="submit"
                 disabled={isProfileSaving}
+                data-anim="save"
                 className={`flex w-full items-center justify-center gap-2 rounded-2xl bg-hot px-4 py-3 font-semibold text-black transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,20,147,0.6)] ${
-                  isProfileSaving ? "cursor-not-allowed opacity-70" : ""
+                  isProfileSaving ? "cursor-not-allowed opacity-70 animate-breathe" : ""
                 }`}
               >
                 {isProfileSaving ? (
