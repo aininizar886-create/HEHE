@@ -1099,7 +1099,7 @@ const ChatBubble = ({
   const reactionEmojis = ["❤️", "😂", "👍", "😮", "😢"];
   const isEdited = Boolean(editedAt);
   return (
-    <div className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+    <div className={`group flex w-full items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
       {!isMine && avatar && (
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-lg">
           {isAvatarImage(avatar) ? (
@@ -1116,142 +1116,139 @@ const ChatBubble = ({
           )}
         </div>
       )}
-      <div
-        className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-[0_0_16px_rgba(0,0,0,0.25)] ${
-          isMine ? "rounded-br-md" : "rounded-bl-md"
-        } ${tone}`}
-      >
-        {replyPreview && (
-          <div className={`mb-2 rounded-xl px-3 py-2 text-[11px] ${
-            isMine ? "bg-black/10 text-black/70" : "bg-white/5 text-soft/70"
-          }`}>
-            <p className="font-semibold">{replyPreview.label}</p>
-            <p className="truncate">{replyPreview.text}</p>
-          </div>
-        )}
-        {share ? (
-          <div
-            role={isLocationShare ? undefined : "button"}
-            onClick={
-              isLocationShare ? undefined : () => (onShareClick ? onShareClick(share) : undefined)
-            }
-            className={`w-full text-left ${!isLocationShare && onShareClick ? "cursor-pointer" : "cursor-default"}`}
-            aria-label="Buka item yang dibagikan"
-          >
-            <div className="space-y-2">
-              {senderLabel && <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">{senderLabel}</p>}
-              <p className={`text-[10px] uppercase tracking-[0.2em] ${isMine ? "text-black/70" : "text-soft/70"}`}>
-                forwarded
-              </p>
-              {isCompactShare ? (
-                <div
-                  className={`rounded-xl px-3 py-2 transition-all ${
-                    isMine ? "bg-black/10" : "bg-white/5"
-                  } ${onShareClick ? "hover:shadow-[0_0_12px_rgba(0,0,0,0.3)]" : ""}`}
+      <div className={`flex w-full max-w-[82%] flex-col ${isMine ? "items-end" : "items-start"}`}>
+        <div
+          className={`w-fit max-w-full rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-[0_0_16px_rgba(0,0,0,0.25)] ${
+            isMine ? "rounded-br-md" : "rounded-bl-md"
+          } ${tone}`}
+        >
+          {replyPreview && (
+            <div
+              className={`mb-2 rounded-xl px-3 py-2 text-[11px] ${
+                isMine ? "bg-black/10 text-black/70" : "bg-white/5 text-soft/70"
+              }`}
+            >
+              <p className="font-semibold">{replyPreview.label}</p>
+              <p className="truncate">{replyPreview.text}</p>
+            </div>
+          )}
+          {share ? (
+            <div
+              role={isLocationShare ? undefined : "button"}
+              onClick={isLocationShare ? undefined : () => (onShareClick ? onShareClick(share) : undefined)}
+              className={`w-full text-left ${
+                !isLocationShare && onShareClick ? "cursor-pointer" : "cursor-default"
+              }`}
+              aria-label="Buka item yang dibagikan"
+            >
+              <div className="space-y-2">
+                {senderLabel && <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">{senderLabel}</p>}
+                <p
+                  className={`text-[10px] uppercase tracking-[0.2em] ${
+                    isMine ? "text-black/70" : "text-soft/70"
+                  }`}
                 >
-                  <p className="text-sm font-semibold">{share.title}</p>
-                  {share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
-                  <p className="mt-2 text-[11px] opacity-70">{compactLabel}</p>
-                </div>
-              ) : (
-                <>
-                  {share.imageSrc && (
-                    <div className="relative h-36 w-full overflow-hidden rounded-xl">
-                      {share.kind === "location" ? (
-                        <a
-                          href={mapLink ?? undefined}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block h-36 w-full"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element -- static map hotlink works best with raw img. */}
-                          <img
-                            src={share.imageSrc}
-                            alt={share.title}
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            className="h-36 w-full object-cover"
-                            onError={(event) => {
-                              const target = event.currentTarget;
-                              const stage = target.dataset.fallbackStage ?? "0";
-                              if (stage === "0") {
-                                target.dataset.fallbackStage = "1";
-                                target.src = createMapFallbackSvg(share.body || "Buka Maps");
-                              }
-                            }}
-                          />
-                        </a>
-                      ) : (
-                        <Image
-                          src={share.imageSrc}
-                          alt={share.title}
-                          fill
-                          sizes="(min-width: 768px) 300px, 200px"
-                          className="object-cover"
-                          unoptimized
-                        />
-                      )}
-                    </div>
-                  )}
-                  {share.videoSrc && (
-                    <video
-                      className="w-full rounded-xl"
-                      controls
-                      preload="metadata"
-                      src={share.videoSrc}
-                    />
-                  )}
+                  forwarded
+                </p>
+                {isCompactShare ? (
                   <div
                     className={`rounded-xl px-3 py-2 transition-all ${
                       isMine ? "bg-black/10" : "bg-white/5"
                     } ${onShareClick ? "hover:shadow-[0_0_12px_rgba(0,0,0,0.3)]" : ""}`}
                   >
                     <p className="text-sm font-semibold">{share.title}</p>
-                    <p className="mt-1 text-xs whitespace-pre-wrap break-words">{share.body}</p>
-                    {!isLocationShare && share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
-                    {isLocationShare && mapLink && (
-                      <a
-                        href={mapLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
-                          isMine ? "bg-black/15 text-black/80" : "bg-white/10 text-soft"
-                        }`}
-                      >
-                        Buka Maps
-                      </a>
-                    )}
+                    {share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
+                    <p className="mt-2 text-[11px] opacity-70">{compactLabel}</p>
                   </div>
-                </>
-              )}
-              {shareCaption && <p className="text-sm whitespace-pre-wrap break-words">{shareCaption}</p>}
+                ) : (
+                  <>
+                    {share.imageSrc && (
+                      <div className="relative h-36 w-full overflow-hidden rounded-xl">
+                        {share.kind === "location" ? (
+                          <a
+                            href={mapLink ?? undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block h-36 w-full"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element -- static map hotlink works best with raw img. */}
+                            <img
+                              src={share.imageSrc}
+                              alt={share.title}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              className="h-36 w-full object-cover"
+                              onError={(event) => {
+                                const target = event.currentTarget;
+                                const stage = target.dataset.fallbackStage ?? "0";
+                                if (stage === "0") {
+                                  target.dataset.fallbackStage = "1";
+                                  target.src = createMapFallbackSvg(share.body || "Buka Maps");
+                                }
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <Image
+                            src={share.imageSrc}
+                            alt={share.title}
+                            fill
+                            sizes="(min-width: 768px) 300px, 200px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        )}
+                      </div>
+                    )}
+                    {share.videoSrc && (
+                      <video className="w-full rounded-xl" controls preload="metadata" src={share.videoSrc} />
+                    )}
+                    <div
+                      className={`rounded-xl px-3 py-2 transition-all ${
+                        isMine ? "bg-black/10" : "bg-white/5"
+                      } ${onShareClick ? "hover:shadow-[0_0_12px_rgba(0,0,0,0.3)]" : ""}`}
+                    >
+                      <p className="text-sm font-semibold">{share.title}</p>
+                      <p className="mt-1 text-xs whitespace-pre-wrap break-words">{share.body}</p>
+                      {!isLocationShare && share.meta && <p className="mt-1 text-[11px] opacity-80">{share.meta}</p>}
+                      {isLocationShare && mapLink && (
+                        <a
+                          href={mapLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
+                            isMine ? "bg-black/15 text-black/80" : "bg-white/10 text-soft"
+                          }`}
+                        >
+                          Buka Maps
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
+                {shareCaption && <p className="text-sm whitespace-pre-wrap break-words">{shareCaption}</p>}
+              </div>
             </div>
+          ) : (
+            <>
+              {senderLabel && <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">{senderLabel}</p>}
+              <p className="whitespace-pre-wrap break-words">{text}</p>
+            </>
+          )}
+          <div
+            className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+              isMine ? "text-black/70" : "text-soft/70"
+            }`}
+          >
+            <span>{time}</span>
+            {status === "sending" && <span>...</span>}
+            {status === "failed" && <span>!</span>}
+            {isMine && status !== "sending" && status !== "failed" && <span>{status === "read" ? "✓✓" : "✓"}</span>}
+            {isEdited && <span className="uppercase tracking-[0.12em] opacity-60">edited</span>}
           </div>
-        ) : (
-          <>
-            {senderLabel && <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">{senderLabel}</p>}
-            <p className="whitespace-pre-wrap break-words">{text}</p>
-          </>
-        )}
-        <div
-          className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-            isMine ? "text-black/70" : "text-soft/70"
-          }`}
-        >
-          <span>{time}</span>
-          {status === "sending" && <span>...</span>}
-          {status === "failed" && <span>!</span>}
-          {isMine && status !== "sending" && status !== "failed" && (
-            <span>{status === "read" ? "✓✓" : "✓"}</span>
-          )}
-          {isEdited && (
-            <span className="uppercase tracking-[0.12em] opacity-60">edited</span>
-          )}
         </div>
-      </div>
-      <div className={`flex flex-col gap-2 ${isMine ? "items-end" : "items-start"}`}>
         {reactionEntries.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className={`mt-2 flex flex-wrap gap-1 ${isMine ? "justify-end" : "justify-start"}`}>
             {reactionEntries.map(([emoji, users]) => {
               const active = currentUserId ? users.includes(currentUserId) : false;
               return (
@@ -1269,7 +1266,11 @@ const ChatBubble = ({
             })}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 text-[11px] opacity-100 md:opacity-0 md:group-hover:opacity-100">
+        <div
+          className={`mt-2 flex flex-wrap items-center gap-2 text-[11px] ${
+            isMine ? "justify-end" : "justify-start"
+          } opacity-100 md:opacity-0 md:group-hover:opacity-100`}
+        >
           {onReply && (
             <button type="button" onClick={onReply} className="rounded-full bg-ink-2/70 px-2 py-1 text-soft">
               Balas
