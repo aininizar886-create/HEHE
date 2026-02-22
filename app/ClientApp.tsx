@@ -1761,7 +1761,7 @@ export default function MelpinApp() {
   }, []);
 
   const scheduleTypingClear = useCallback(
-    (threadId: string, delayMs = 2200) => {
+    (threadId: string, delayMs = 1400) => {
       const timers = typingTimeoutsRef.current;
       const existing = timers.get(threadId);
       if (existing) window.clearTimeout(existing);
@@ -1784,7 +1784,7 @@ export default function MelpinApp() {
       const lastMap = typingLastSentRef.current;
       const now = Date.now();
       const last = lastMap.get(threadId) ?? 0;
-      if (isTyping && now - last < 1200) return;
+      if (isTyping && now - last < 350) return;
       lastMap.set(threadId, now);
       channel.send({
         type: "broadcast",
@@ -3007,7 +3007,13 @@ export default function MelpinApp() {
     setChatDrafts((prev) => ({ ...prev, [threadId]: value }));
     const thread = chatThreadsRef.current.find((item) => item.id === threadId);
     if (thread?.kind === "realtime") {
-      emitTyping(threadId, value.trim().length > 0);
+      const trimmed = value.trim();
+      const shouldType = trimmed.length > 0;
+      setThreadTyping(threadId, shouldType);
+      emitTyping(threadId, shouldType);
+      if (shouldType) {
+        scheduleTypingClear(threadId);
+      }
     }
   };
 
