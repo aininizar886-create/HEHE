@@ -1499,6 +1499,7 @@ export default function MelpinApp() {
   const [isChatAttachOpen, setIsChatAttachOpen] = useState(false);
   const [sharePicker, setSharePicker] = useState<"note" | "reminder" | "gallery" | null>(null);
   const chatMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const chatAutoScrollRef = useRef(true);
 
   const ensureDefaultThreads = useCallback(async (threads: Record<string, unknown>[]) => {
     if (threads.length) return threads;
@@ -1557,7 +1558,11 @@ export default function MelpinApp() {
       })
     );
     setChatThreads(threadsWithMessages);
-    setActiveThreadId(threadsWithMessages[0]?.id ?? null);
+    setActiveThreadId((current) =>
+      current && threadsWithMessages.some((thread) => thread.id === current)
+        ? current
+        : threadsWithMessages[0]?.id ?? null
+    );
   }, [ensureDefaultThreads, sessionUserId]);
 
   const syncServerData = useCallback(
@@ -2046,10 +2051,21 @@ export default function MelpinApp() {
   }, [isLoggedIn, refreshThreadMeta]);
 
   useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
+    chatAutoScrollRef.current = true;
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (!chatRef.current) return;
+    if (!chatAutoScrollRef.current) return;
+    chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [activeThreadId, chatThreads, aiLoadingThread]);
+
+  const handleChatScroll = useCallback(() => {
+    const node = chatRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    chatAutoScrollRef.current = distanceFromBottom < 120;
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -5455,6 +5471,7 @@ export default function MelpinApp() {
 
                     <div
                       ref={chatRef}
+                      onScroll={handleChatScroll}
                       className="chat-wall mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-hot/15 bg-black/40 p-4 text-sm scrollbar-hide"
                     >
                       {activeThread.messages.length === 0 && (
