@@ -2854,7 +2854,6 @@ export default function MelpinApp() {
     const draft = chatDrafts[thread.id] ?? "";
     const trimmed = draft.trim();
     if (!trimmed) return;
-    if (isChatSending) return;
 
     const userMessage: ChatMessage = {
       id: makeId(),
@@ -2870,15 +2869,15 @@ export default function MelpinApp() {
     }));
     handleChatDraftChange(thread.id, "");
 
-    try {
-      setIsChatSending(true);
-      const saved = await persistChatMessage(thread.id, userMessage);
-      replaceChatMessage(thread.id, userMessage.id, saved);
-    } catch {
-      showNotificationMessage("Gagal mengirim chat.");
-    } finally {
-      setIsChatSending(false);
-    }
+    setIsChatSending(true);
+    const spinnerTimeout = window.setTimeout(() => setIsChatSending(false), 700);
+    persistChatMessage(thread.id, userMessage)
+      .then((saved) => replaceChatMessage(thread.id, userMessage.id, saved))
+      .catch(() => showNotificationMessage("Gagal mengirim chat."))
+      .finally(() => {
+        window.clearTimeout(spinnerTimeout);
+        setIsChatSending(false);
+      });
 
     if (thread.kind === "ai") {
       setAiLoadingThread(thread.id);
