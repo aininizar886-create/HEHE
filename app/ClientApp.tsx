@@ -1309,6 +1309,7 @@ export default function MelpinApp() {
   const [isChatSending, setIsChatSending] = useState(false);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [onlineMap, setOnlineMap] = useState<Record<string, boolean>>({});
+  const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const chatRef = useRef<HTMLDivElement | null>(null);
   const chatThreadsRef = useRef<ChatThread[]>([]);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -1320,6 +1321,8 @@ export default function MelpinApp() {
   const profileRealtimeRef = useRef<RealtimeChannel | null>(null);
   const presenceRealtimeRef = useRef<RealtimeChannel | null>(null);
   const [presenceActive, setPresenceActive] = useState(false);
+  const typingTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const typingLastSentRef = useRef<Map<string, number>>(new Map());
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactStatus, setContactStatus] = useState("");
@@ -1750,6 +1753,48 @@ export default function MelpinApp() {
     [getContactIds]
   );
 
+  const setThreadTyping = useCallback((threadId: string, isTyping: boolean) => {
+    setTypingMap((prev) => {
+      if (prev[threadId] === isTyping) return prev;
+      return { ...prev, [threadId]: isTyping };
+    });
+  }, []);
+
+  const scheduleTypingClear = useCallback(
+    (threadId: string, delayMs = 2200) => {
+      const timers = typingTimeoutsRef.current;
+      const existing = timers.get(threadId);
+      if (existing) window.clearTimeout(existing);
+      const timeoutId = window.setTimeout(() => {
+        setThreadTyping(threadId, false);
+        timers.delete(threadId);
+      }, delayMs);
+      timers.set(threadId, timeoutId);
+    },
+    [setThreadTyping]
+  );
+
+  const emitTyping = useCallback(
+    (threadId: string, isTyping: boolean) => {
+      const channel = chatRealtimeRef.current;
+      if (!channel) return;
+      if (activeThreadIdRef.current !== threadId) return;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      if (!userId) return;
+      const lastMap = typingLastSentRef.current;
+      const now = Date.now();
+      const last = lastMap.get(threadId) ?? 0;
+      if (isTyping && now - last < 1200) return;
+      lastMap.set(threadId, now);
+      channel.send({
+        type: "broadcast",
+        event: "typing",
+        payload: { userId, typing: isTyping, at: now },
+      });
+    },
+    [sessionUserId]
+  );
+
   useEffect(() => {
     if (!presenceActive || !presenceRealtimeRef.current) return;
     updateOnlineMapFromPresence(presenceRealtimeRef.current.presenceState() as Record<string, unknown>);
@@ -1858,6 +1903,17 @@ export default function MelpinApp() {
         mergeIncomingMessages(threadId, incoming);
       }
     );
+    channel.on("broadcast", { event: "typing" }, (payload) => {
+      const data = payload?.payload as { userId?: string; typing?: boolean } | undefined;
+      const userId = sessionUserIdRef.current ?? sessionUserId;
+      if (!data?.userId || data.userId === userId) return;
+      if (data.typing) {
+        setThreadTyping(threadId, true);
+        scheduleTypingClear(threadId);
+      } else {
+        setThreadTyping(threadId, false);
+      }
+    });
 
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
@@ -1871,12 +1927,17 @@ export default function MelpinApp() {
 
     return () => {
       setRealtimeActive(false);
+      setThreadTyping(threadId, false);
+      const timers = typingTimeoutsRef.current;
+      const existing = timers.get(threadId);
+      if (existing) window.clearTimeout(existing);
+      timers.delete(threadId);
       channel.unsubscribe();
       if (chatRealtimeRef.current === channel) {
         chatRealtimeRef.current = null;
       }
     };
-  }, [activeThreadId, currentView, isLoggedIn, sessionUserId]);
+  }, [activeThreadId, currentView, isLoggedIn, scheduleTypingClear, sessionUserId, setThreadTyping]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -2909,6 +2970,10 @@ export default function MelpinApp() {
 
   const handleChatDraftChange = (threadId: string, value: string) => {
     setChatDrafts((prev) => ({ ...prev, [threadId]: value }));
+    const thread = chatThreadsRef.current.find((item) => item.id === threadId);
+    if (thread?.kind === "realtime") {
+      emitTyping(threadId, value.trim().length > 0);
+    }
   };
 
   const mergeIncomingMessages = (threadId: string, incoming: ChatMessage[]) => {
@@ -2988,10 +3053,14 @@ export default function MelpinApp() {
       share: payload,
       shareCaption: caption.trim(),
     };
+    const thread = chatThreadsRef.current.find((item) => item.id === threadId);
     updateChatThread(threadId, (thread) => ({
       ...thread,
       messages: [...thread.messages, message],
     }));
+    if (thread?.kind === "realtime") {
+      emitTyping(threadId, false);
+    }
     try {
       const saved = await persistChatMessage(threadId, message);
       replaceChatMessage(threadId, message.id, saved);
@@ -3027,6 +3096,9 @@ export default function MelpinApp() {
       messages: [...current.messages, userMessage],
     }));
     handleChatDraftChange(thread.id, "");
+    if (thread.kind === "realtime") {
+      emitTyping(thread.id, false);
+    }
 
     setIsChatSending(true);
     const spinnerTimeout = window.setTimeout(() => setIsChatSending(false), 700);
@@ -3449,6 +3521,10 @@ export default function MelpinApp() {
     if (activeThread.contactId) return Boolean(onlineMap[activeThread.contactId]);
     return false;
   }, [activeThread, onlineMap]);
+  const activeTyping = useMemo(() => {
+    if (!activeThread || activeThread.kind !== "realtime") return false;
+    return Boolean(typingMap[activeThread.id]);
+  }, [activeThread, typingMap]);
 
   const activeDraft = useMemo(
     () => (activeThread ? chatDrafts[activeThread.id] ?? "" : ""),
@@ -4952,6 +5028,18 @@ export default function MelpinApp() {
                           />
                         );
                       })}
+                      {activeThread.kind === "realtime" && activeTyping && (
+                        <div className="flex justify-start">
+                          <div className="flex items-center rounded-2xl bg-ink-3/80 px-3 py-2 text-xs text-soft">
+                            <span className="mr-2">Sedang mengetik</span>
+                            <span className="typing-dots" aria-hidden="true">
+                              <span />
+                              <span />
+                              <span />
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {aiLoadingThread === activeThread.id && (
                         <div className="flex justify-start">
                           <div className="flex items-center rounded-2xl bg-ink-3/80 px-3 py-2 text-xs text-soft">
