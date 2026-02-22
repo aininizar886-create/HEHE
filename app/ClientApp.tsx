@@ -3220,12 +3220,12 @@ export default function MelpinApp() {
       prev.map((thread) => {
         if (thread.id !== threadId) return thread;
         let changed = false;
-        const nextMessages = thread.messages.map((message) => {
+        const nextMessages: ChatMessage[] = thread.messages.map((message) => {
           if (message.from !== "me") return message;
           if (message.timestamp > lastTimestamp) return message;
           if (message.status === "read" || message.status === "failed") return message;
           changed = true;
-          return { ...message, status: "read" };
+          return { ...message, status: "read" as ChatMessage["status"] };
         });
         return changed ? { ...thread, messages: nextMessages } : thread;
       })
