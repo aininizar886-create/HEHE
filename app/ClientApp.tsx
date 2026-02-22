@@ -1317,6 +1317,9 @@ export default function MelpinApp() {
   const [streamEnabled, setStreamEnabled] = useState(true);
   const chatRealtimeRef = useRef<RealtimeChannel | null>(null);
   const [realtimeActive, setRealtimeActive] = useState(false);
+  const profileRealtimeRef = useRef<RealtimeChannel | null>(null);
+  const presenceRealtimeRef = useRef<RealtimeChannel | null>(null);
+  const [presenceActive, setPresenceActive] = useState(false);
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactStatus, setContactStatus] = useState("");
@@ -1697,6 +1700,61 @@ export default function MelpinApp() {
     activeThreadIdRef.current = activeThreadId;
   }, [activeThreadId]);
 
+  const getContactIds = useCallback(() => {
+    const ids = new Set<string>();
+    chatThreadsRef.current.forEach((thread) => {
+      if (thread.kind === "realtime" && thread.contactId) ids.add(thread.contactId);
+    });
+    return Array.from(ids);
+  }, []);
+
+  const updateContactDisplay = useCallback(
+    (
+      userId: string,
+      profileUpdate: {
+        name?: string | null;
+        status?: string | null;
+        avatar?: string | null;
+        avatarImage?: string | null;
+        avatarAsset?: string | null;
+      }
+    ) => {
+      setChatThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.kind !== "realtime" || thread.contactId !== userId) return thread;
+          const nextTitle = profileUpdate.name?.trim() || thread.title;
+          const nextSubtitle = profileUpdate.status ?? thread.subtitle;
+          const nextAvatar =
+            profileUpdate.avatarImage ||
+            profileUpdate.avatarAsset ||
+            profileUpdate.avatar ||
+            thread.avatar;
+          return { ...thread, title: nextTitle, subtitle: nextSubtitle, avatar: nextAvatar };
+        })
+      );
+    },
+    []
+  );
+
+  const updateOnlineMapFromPresence = useCallback(
+    (state: Record<string, unknown>) => {
+      const contactIds = getContactIds();
+      if (!contactIds.length) return;
+      const next: Record<string, boolean> = {};
+      contactIds.forEach((id) => {
+        const entries = state[id];
+        next[id] = Array.isArray(entries) && entries.length > 0;
+      });
+      setOnlineMap(next);
+    },
+    [getContactIds]
+  );
+
+  useEffect(() => {
+    if (!presenceActive || !presenceRealtimeRef.current) return;
+    updateOnlineMapFromPresence(presenceRealtimeRef.current.presenceState() as Record<string, unknown>);
+  }, [chatThreads, presenceActive, updateOnlineMapFromPresence]);
+
   const sendPresenceHeartbeat = useCallback(async () => {
     if (!sessionUserIdRef.current) return;
     try {
@@ -1728,7 +1786,7 @@ export default function MelpinApp() {
   }, []);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || presenceActive) return;
     sendPresenceHeartbeat();
     refreshOnlineStatus();
     const heartbeatTimer = window.setInterval(() => {
@@ -1746,7 +1804,7 @@ export default function MelpinApp() {
       window.clearInterval(heartbeatTimer);
       document.removeEventListener("visibilitychange", visibilityHandler);
     };
-  }, [isLoggedIn, refreshOnlineStatus, sendPresenceHeartbeat]);
+  }, [isLoggedIn, presenceActive, refreshOnlineStatus, sendPresenceHeartbeat]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -1819,6 +1877,99 @@ export default function MelpinApp() {
       }
     };
   }, [activeThreadId, currentView, isLoggedIn, sessionUserId]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+    const contactIds = getContactIds();
+    if (!contactIds.length) return;
+    const filter = `userId=in.(${contactIds.join(",")})`;
+
+    if (profileRealtimeRef.current) {
+      profileRealtimeRef.current.unsubscribe();
+      profileRealtimeRef.current = null;
+    }
+
+    const channel = supabase.channel(`profiles:${contactIds.join(",")}`);
+    profileRealtimeRef.current = channel;
+
+    const applyPayload = (payload: { new?: Record<string, unknown> | null }) => {
+      const next = payload?.new ?? null;
+      if (!next || typeof next.userId !== "string") return;
+      updateContactDisplay(next.userId, {
+        name: typeof next.name === "string" ? next.name : null,
+        status: typeof next.status === "string" ? next.status : null,
+        avatar: typeof next.avatar === "string" ? next.avatar : null,
+        avatarImage: typeof next.avatarImage === "string" ? next.avatarImage : null,
+        avatarAsset: typeof next.avatarAsset === "string" ? next.avatarAsset : null,
+      });
+    };
+
+    channel.on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "Profile", filter },
+      applyPayload
+    );
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "Profile", filter },
+      applyPayload
+    );
+    channel.subscribe();
+
+    return () => {
+      channel.unsubscribe();
+      if (profileRealtimeRef.current === channel) {
+        profileRealtimeRef.current = null;
+      }
+    };
+  }, [getContactIds, isLoggedIn, updateContactDisplay]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const supabase = getSupabaseBrowser();
+    if (!supabase || !sessionUserId) return;
+
+    if (presenceRealtimeRef.current) {
+      presenceRealtimeRef.current.unsubscribe();
+      presenceRealtimeRef.current = null;
+    }
+
+    const channel = supabase.channel("presence:global", {
+      config: { presence: { key: sessionUserId } },
+    });
+    presenceRealtimeRef.current = channel;
+    setPresenceActive(false);
+
+    const syncPresence = () => {
+      updateOnlineMapFromPresence(channel.presenceState() as Record<string, unknown>);
+    };
+
+    channel.on("presence", { event: "sync" }, syncPresence);
+    channel.on("presence", { event: "join" }, syncPresence);
+    channel.on("presence", { event: "leave" }, syncPresence);
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        setPresenceActive(true);
+        await channel.track({ user_id: sessionUserId, online_at: new Date().toISOString() });
+        syncPresence();
+        return;
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setPresenceActive(false);
+      }
+    });
+
+    return () => {
+      setPresenceActive(false);
+      channel.unsubscribe();
+      if (presenceRealtimeRef.current === channel) {
+        presenceRealtimeRef.current = null;
+      }
+    };
+  }, [isLoggedIn, sessionUserId, updateOnlineMapFromPresence]);
 
   useEffect(() => {
     if (!isLoggedIn || currentView !== "chat-hub") return;
