@@ -69,10 +69,9 @@ optgroup {
 
 .chat-wall {
   background:
-    radial-gradient(20% 20% at 10% 20%, rgba(255, 79, 163, 0.08), transparent 60%),
-    radial-gradient(16% 16% at 80% 10%, rgba(255, 138, 197, 0.08), transparent 60%),
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04) 6px, transparent 6px, transparent 12px),
-    #0b0b12;
+    radial-gradient(30% 40% at 12% 18%, rgba(255, 79, 163, 0.12), transparent 60%),
+    radial-gradient(28% 36% at 88% 82%, rgba(255, 138, 197, 0.1), transparent 60%),
+    linear-gradient(180deg, rgba(12, 12, 18, 0.96), rgba(10, 10, 13, 0.9));
 }
 
 @keyframes floaty {

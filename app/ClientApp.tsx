@@ -5339,19 +5339,19 @@ export default function MelpinApp() {
                           isActive ? "bg-hot/15 border border-hot/30" : "border border-transparent hover:bg-ink-3/70"
                         }`}
                       >
-                      <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl">
-                        <div className="relative h-11 w-11">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl sm:h-11 sm:w-11">
+                        <div className="relative h-10 w-10 sm:h-11 sm:w-11">
                           {isAvatarImage(thread.avatar) ? (
                             <Image
                               src={thread.avatar}
                               alt={thread.title}
                               width={44}
                               height={44}
-                              className="h-11 w-11 rounded-full object-cover"
+                              className="h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11"
                               unoptimized
                             />
                           ) : (
-                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-2/80 text-xl">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-2/80 text-xl sm:h-11 sm:w-11">
                               {thread.avatar}
                             </div>
                           )}
@@ -5408,8 +5408,8 @@ export default function MelpinApp() {
               <div className="glass flex min-w-0 h-[70vh] max-h-[74vh] flex-col overflow-hidden rounded-[32px] p-4 sm:h-[74vh] sm:max-h-[78vh] sm:p-6 lg:h-[76vh] lg:max-h-[82vh]">
                 {activeThread ? (
                   <>
-                    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-4 py-3">
-                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-2xl">
+                    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hot/20 bg-ink-3/70 px-3 py-2 sm:px-4 sm:py-3">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-ink-2/80 text-xl sm:h-12 sm:w-12 sm:text-2xl">
                         {isAvatarImage(activeThread.avatar) ? (
                           <Image
                             src={activeThread.avatar}
